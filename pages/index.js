@@ -1,14 +1,14 @@
-// pages/index.js
-import Head from 'next/head'
-import Header from '@components/Header'
-import Footer from '@components/Footer'
-import MealPlanner from './meal-planner'  // Adjust path if needed
+import Head from 'next/head';
+import Header from '@components/Header';
+import Footer from '@components/Footer';
+import MealPlanner from './meal-planner';
+import CalendarView from './CalendarView';
 
 export default function Home() {
     return (
         <div className="container">
             <Head>
-                <title>Meal Planner with Google Calendar</title>
+                <title>Meal Planner with Calendar</title>
                 <link rel="icon" href="/favicon.ico" />
             </Head>
 
@@ -22,25 +22,16 @@ export default function Home() {
                         marginTop: '2rem'
                     }}
                 >
-                    {/* Meal Planner Column */}
                     <div style={{ flex: '1 1 40%', minWidth: '300px', marginRight: '20px' }}>
                         <MealPlanner />
                     </div>
-
-                    {/* Google Calendar Column */}
                     <div style={{ flex: '1 1 40%', minWidth: '300px' }}>
-                        <h2>My Google Calendar</h2>
-                        <iframe
-                            src="https://calendar.google.com/calendar/embed?src=your_google_calendar_id&ctz=America%2FNew_York"
-                            style={{ border: 0, width: '100%', height: '600px' }}
-                            frameBorder="0"
-                            scrolling="no"
-                        ></iframe>
+                        <CalendarView />
                     </div>
                 </div>
             </main>
 
             <Footer />
         </div>
-    )
+    );
 }

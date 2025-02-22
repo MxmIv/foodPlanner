@@ -9,7 +9,10 @@
     "export": "next build && next export"
   },
   "dependencies": {
+    "@fullcalendar/daygrid": "^6.1.15",
+    "@fullcalendar/react": "^6.1.15",
     "@netlify/plugin-nextjs": "^5.9.4",
+    "gapi-js": "^4.0.2",
     "next": "^15.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
