@@ -1,20 +1,12 @@
-// components/MealPlanner.js
-"use client";
-
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Coffee, Moon, ChevronLeft, ChevronRight, Save } from 'lucide-react';
-import Auth from './Auth';
 
-const MealPlanner = () => {
+const MealPlanner = ({ userId }) => {
     const getWeekDates = (offset = 0) => {
         const now = new Date();
-
-        // Get Monday of current week
         const monday = new Date(now);
         monday.setDate(now.getDate() - (now.getDay() - 1) + (offset * 7));
         monday.setHours(0, 0, 0, 0);
-
-        // Generate week dates starting from Monday
         return Array.from({ length: 7 }, (_, index) => {
             const date = new Date(monday);
             date.setDate(monday.getDate() + index);
@@ -22,9 +14,7 @@ const MealPlanner = () => {
         });
     };
 
-    // State declarations
     const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
-    const [userId, setUserId] = useState(null);
     const [meals, setMeals] = useState({
         lunch: Array(7).fill(''),
         dinner: Array(7).fill('')
@@ -36,13 +26,7 @@ const MealPlanner = () => {
     const [error, setError] = useState(null);
 
     const loadEventsForWeek = async () => {
-        // Add more comprehensive check for Google Calendar API
-        if (!userId || !window.gapi?.client?.calendar) {
-            console.log('Google Calendar API not ready:', {
-                userId: !!userId,
-                gapiClient: !!window.gapi?.client,
-                calendarApi: !!window.gapi?.client?.calendar
-            });
+        if (!userId || !window.gapi?.client) {
             return;
         }
 
@@ -50,7 +34,6 @@ const MealPlanner = () => {
         setError(null);
 
         try {
-            // Get start and end of week
             const weekStart = new Date(weekDates[0]);
             weekStart.setHours(0, 0, 0, 0);
 
@@ -62,6 +45,11 @@ const MealPlanner = () => {
                 weekEnd: weekEnd.toISOString()
             });
 
+            const token = window.gapi.client.getToken();
+            if (!token) {
+                throw new Error('No valid token available');
+            }
+
             const response = await window.gapi.client.calendar.events.list({
                 calendarId: 'primary',
                 timeMin: weekStart.toISOString(),
@@ -70,10 +58,6 @@ const MealPlanner = () => {
                 orderBy: 'startTime'
             });
 
-            // Add more detailed logging
-            console.log('Calendar events response:', response);
-
-            // Map each calendar event to its corresponding day
             const weekEvents = weekDates.map(date => {
                 const dayEvents = response.result.items.filter(event => {
                     const eventStart = new Date(event.start.dateTime || event.start.date);
@@ -92,26 +76,23 @@ const MealPlanner = () => {
                     : null;
             });
 
-            console.log('Processed week events:', weekEvents);
             setEvents(weekEvents);
         } catch (error) {
             console.error('Error loading calendar events:', error);
-            setError('Failed to load calendar events');
+            setError('Failed to load calendar events. Please ensure you are logged in.');
             setEvents(Array(7).fill(null));
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Load meals for the week from localStorage
-    const loadMealsForWeek = (weekOffset, currentUserId) => {
-        if (!currentUserId) return;
+    const loadMealsForWeek = () => {
+        if (!userId) return;
 
         try {
-            const weekKey = `meals_${currentUserId}_${weekOffset}`;
+            const weekKey = `meals_${userId}_${currentWeekOffset}`;
             const savedMeals = localStorage.getItem(weekKey);
 
-            // Always initialize a fresh 7-day array, then overlay saved meals if they exist
             const freshMeals = {
                 lunch: Array(7).fill(''),
                 dinner: Array(7).fill('')
@@ -119,26 +100,18 @@ const MealPlanner = () => {
 
             if (savedMeals) {
                 const parsedMeals = JSON.parse(savedMeals);
-
-                // Safely copy saved meals, ensuring we don't go out of bounds
                 if (parsedMeals?.lunch) {
                     parsedMeals.lunch.forEach((meal, index) => {
-                        if (index < 7) {
-                            freshMeals.lunch[index] = meal || '';
-                        }
+                        if (index < 7) freshMeals.lunch[index] = meal || '';
                     });
                 }
-
                 if (parsedMeals?.dinner) {
                     parsedMeals.dinner.forEach((meal, index) => {
-                        if (index < 7) {
-                            freshMeals.dinner[index] = meal || '';
-                        }
+                        if (index < 7) freshMeals.dinner[index] = meal || '';
                     });
                 }
             }
 
-            // Set the meals, ensuring a full 7-day array
             setMeals(freshMeals);
         } catch (error) {
             console.error('Error loading meals:', error);
@@ -149,41 +122,21 @@ const MealPlanner = () => {
         }
     };
 
-    // Update week dates and load data when offset changes
     useEffect(() => {
         setWeekDates(getWeekDates(currentWeekOffset));
     }, [currentWeekOffset]);
 
     useEffect(() => {
         if (userId) {
-            // Load meals first, then load events
-            loadMealsForWeek(currentWeekOffset, userId);
-
+            loadMealsForWeek();
             // Add a small delay to ensure Google API is fully initialized
             const loadEventsTimer = setTimeout(() => {
                 loadEventsForWeek();
-            }, 250);
-
+            }, 1000);
             return () => clearTimeout(loadEventsTimer);
         }
     }, [weekDates, userId]);
 
-    // Handle auth state change
-    const handleAuthChange = async ({ isAuthenticated, userId: newUserId }) => {
-        setUserId(newUserId);
-        if (isAuthenticated && newUserId) {
-            loadMealsForWeek(currentWeekOffset, newUserId);
-            await loadEventsForWeek();
-        } else {
-            setMeals({
-                lunch: Array(7).fill(''),
-                dinner: Array(7).fill('')
-            });
-            setEvents(Array(7).fill(null));
-        }
-    };
-
-    // Save meals
     const saveMeals = () => {
         if (!userId) {
             setSaveStatus('Please login to save meals');
@@ -201,22 +154,18 @@ const MealPlanner = () => {
         }
     };
 
-    // Navigation functions
     const previousWeek = () => setCurrentWeekOffset(prev => prev - 1);
     const nextWeek = () => setCurrentWeekOffset(prev => prev + 1);
     const goToCurrentWeek = () => setCurrentWeekOffset(0);
 
-    // Format date for display
     const formatDate = (date) => {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
-    // Get day name
     const getDayName = (date) => {
         return date.toLocaleDateString('en-US', { weekday: 'short' });
     };
 
-    // Handle meal updates
     const updateMeal = (mealType, dayIndex, value) => {
         setMeals(prev => ({
             ...prev,
@@ -225,13 +174,7 @@ const MealPlanner = () => {
             )
         }));
     };
-    useEffect(() => {
-        console.log('MealPlanner: Rendering component');
-        console.log('Current userId:', userId);
-    }, []);
 
-
-    // Auto-save effect
     useEffect(() => {
         if (userId) {
             const timeoutId = setTimeout(() => {
@@ -244,13 +187,10 @@ const MealPlanner = () => {
     return (
         <div className="w-full bg-white rounded-lg shadow-lg">
             <div className="p-6">
-                {/* Header with Auth */}
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center gap-2">
-                        <Calendar className="h-6 w-6" />
-                        <h2 className="text-2xl font-bold">Weekly Meal Planner</h2>
-                    </div>
-                    <Auth onAuthChange={handleAuthChange} />
+                {/* Header */}
+                <div className="flex items-center gap-2 mb-6">
+                    <Calendar className="h-6 w-6" />
+                    <h2 className="text-2xl font-bold">Weekly Meal Planner</h2>
                 </div>
 
                 {/* Error Display */}
