@@ -1,6 +1,7 @@
-// lib/google-api.js
-
-const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'];
+// google-api.js
+const DISCOVERY_DOCS = [
+    'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'
+];
 
 const googleApi = {
     initGapi: () => {
@@ -9,7 +10,7 @@ const googleApi = {
                 window.gapi.load('client', () => {
                     window.gapi.client
                         .init({
-                            apiKey: process.env.NEXT_PUBLIC_GOOGLE_API_KEY, // Replace with your API Key
+                            apiKey: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
                             discoveryDocs: DISCOVERY_DOCS,
                         })
                         .then(() => {
@@ -31,7 +32,6 @@ const googleApi = {
 
     handleAuthClick: async () => {
         try {
-            // Ensure gapi is initialized
             if (!window.gapi || !window.gapi.client) {
                 console.log("gapi client not ready, initializing...");
                 await googleApi.initGapi();
@@ -50,7 +50,8 @@ const googleApi = {
             ) {
                 const tokenClient = window.google.accounts.oauth2.initTokenClient({
                     client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-                    scope: 'https://www.googleapis.com/auth/calendar.events',
+                    scope:
+                        'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.profile',
                     callback: (resp) => {
                         if (resp.error !== undefined) {
                             console.error("Token client callback error:", resp.error);
@@ -111,14 +112,16 @@ const googleApi = {
             window.gapi.client.calendar
         ) {
             try {
+                const oneDayAgo = new Date(Date.now() - 86400000).toISOString();
                 const request = {
                     calendarId: 'primary',
-                    timeMin: new Date().toISOString(),
+                    timeMin: oneDayAgo,
                     showDeleted: false,
                     singleEvents: true,
-                    maxResults: 10,
+                    maxResults: 50,
                     orderBy: 'startTime',
                 };
+                console.log("Requesting events with parameters:", request);
                 const response = await window.gapi.client.calendar.events.list(request);
                 console.log("Fetched upcoming events:", response.result.items);
                 return response.result.items;
@@ -127,8 +130,7 @@ const googleApi = {
                 return [];
             }
         } else {
-            const errMsg = "Error: gapi client calendar not available";
-            console.error(errMsg);
+            console.error("Error: gapi client calendar not available");
             return [];
         }
     },
@@ -153,11 +155,41 @@ const googleApi = {
                 throw error;
             }
         } else {
-            const errorMsg = "Cannot create event: gapi client not properly initialized or token missing.";
+            const errorMsg =
+                "Cannot create event: gapi client not properly initialized or token missing.";
             console.error(errorMsg);
             throw new Error(errorMsg);
         }
-    }
+    },
+
+    getUserInfo: async () => {
+        if (
+            typeof window !== 'undefined' &&
+            window.gapi &&
+            window.gapi.client.getToken()
+        ) {
+            const token = window.gapi.client.getToken().access_token;
+            try {
+                const response = await fetch(
+                    'https://www.googleapis.com/oauth2/v3/userinfo',
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+                const data = await response.json();
+                console.log("Fetched user info:", data);
+                return data;
+            } catch (error) {
+                console.error("Error fetching user info:", error);
+                return null;
+            }
+        } else {
+            console.error("Cannot fetch user info: gapi client token missing.");
+            return null;
+        }
+    },
 };
 
 export { googleApi };
