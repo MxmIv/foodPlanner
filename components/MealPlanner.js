@@ -26,7 +26,12 @@ const MealPlanner = ({ userId }) => {
     const [error, setError] = useState(null);
 
     const loadEventsForWeek = async () => {
-        if (!userId || !window.gapi?.client) {
+        if (!userId || !window.gapi?.client || !window.gapi.client.getToken()) {
+            console.log('Calendar API not ready:', {
+                userId: !!userId,
+                gapiClient: !!window.gapi?.client,
+                hasToken: !!window.gapi?.client?.getToken()
+            });
             return;
         }
 
@@ -45,6 +50,7 @@ const MealPlanner = ({ userId }) => {
                 weekEnd: weekEnd.toISOString()
             });
 
+            // Ensure we have a valid access token
             const token = window.gapi.client.getToken();
             if (!token) {
                 throw new Error('No valid token available');
@@ -126,16 +132,38 @@ const MealPlanner = ({ userId }) => {
         setWeekDates(getWeekDates(currentWeekOffset));
     }, [currentWeekOffset]);
 
+    // Add new state for API initialization
+    const [isGoogleApiReady, setIsGoogleApiReady] = useState(false);
+
+    // Check Google API initialization
     useEffect(() => {
-        if (userId) {
-            loadMealsForWeek();
-            // Add a small delay to ensure Google API is fully initialized
-            const loadEventsTimer = setTimeout(() => {
-                loadEventsForWeek();
-            }, 1000);
-            return () => clearTimeout(loadEventsTimer);
+        const checkGoogleApiReady = () => {
+            const isReady = !!(window.gapi?.client && window.gapi.client.getToken());
+            setIsGoogleApiReady(isReady);
+            return isReady;
+        };
+
+        // Initial check
+        if (!checkGoogleApiReady()) {
+            // If not ready, set up an interval to check
+            const intervalId = setInterval(() => {
+                if (checkGoogleApiReady()) {
+                    clearInterval(intervalId);
+                }
+            }, 100); // Check every 100ms
+
+            // Cleanup
+            return () => clearInterval(intervalId);
         }
-    }, [weekDates, userId]);
+    }, [userId]);
+
+    // Load data when ready
+    useEffect(() => {
+        if (userId && isGoogleApiReady) {
+            loadMealsForWeek();
+            loadEventsForWeek();
+        }
+    }, [weekDates, userId, isGoogleApiReady]);
 
     const saveMeals = () => {
         if (!userId) {
