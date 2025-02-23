@@ -1,203 +1,266 @@
-// meal-planner.js
-import { useState, useEffect } from 'react';
-import { googleApi } from '@components/google-api';
+// components/MealPlanner.js
+"use client";
 
-const MealPlanner = ({ setIsSignedIn }) => {
-    const [meal, setMeal] = useState('');
-    const [mealEntries, setMealEntries] = useState([]);
-    const [schedulingId, setSchedulingId] = useState(null);
-    const [scheduleDate, setScheduleDate] = useState('');
-    const [mealType, setMealType] = useState('Lunch');
-    const [userInfo, setUserInfo] = useState(null);
+import React, { useState, useEffect } from 'react';
+import { Calendar, Users, Coffee, Moon, ChevronLeft, ChevronRight, Save } from 'lucide-react';
+import Auth from './Auth';
 
-    // Load meal entries from localStorage on mount
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const storedMeals = localStorage.getItem('mealEntries');
-            if (storedMeals) {
-                setMealEntries(JSON.parse(storedMeals));
-            }
-        }
-    }, []);
+const MealPlanner = () => {
+    const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+    const [userId, setUserId] = useState(null);
+    const [meals, setMeals] = useState({
+        lunch: Array(7).fill(''),
+        dinner: Array(7).fill('')
+    });
+    const [events, setEvents] = useState([]);
+    const [saveStatus, setSaveStatus] = useState('');
 
-    // Save meal entries to localStorage when updated
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('mealEntries', JSON.stringify(mealEntries));
-        }
-    }, [mealEntries]);
-
-    const handleAddMeal = (e) => {
-        e.preventDefault();
-        if (!meal.trim()) return;
-        const newEntry = {
-            id: Date.now(),
-            meal: meal.trim(),
-            createdAt: new Date().toISOString(),
-            schedule: null,
-        };
-        setMealEntries([...mealEntries, newEntry]);
-        setMeal('');
-        console.log("Added meal:", newEntry);
-    };
-
-    const startScheduling = (id) => {
-        setSchedulingId(id);
-        setScheduleDate('');
-        setMealType('Lunch');
-    };
-
-    const handleScheduleSubmit = async (e) => {
-        e.preventDefault();
-        if (!scheduleDate) return;
+    // Load meals for specific week
+    const loadMealsForWeek = (weekOffset, currentUserId) => {
+        if (!currentUserId) return;
 
         try {
-            // Update local meal entry with schedule info
-            setMealEntries((prevEntries) =>
-                prevEntries.map((entry) =>
-                    entry.id === schedulingId
-                        ? { ...entry, schedule: { date: scheduleDate, mealType } }
-                        : entry
-                )
-            );
+            const weekKey = `meals_${currentUserId}_${weekOffset}`;
+            const savedMeals = localStorage.getItem(weekKey);
 
-            const scheduledMeal = mealEntries.find(
-                (entry) => entry.id === schedulingId
-            );
-            if (!scheduledMeal) {
-                throw new Error("Meal not found for scheduling.");
+            if (savedMeals) {
+                try {
+                    const parsedMeals = JSON.parse(savedMeals);
+                    // Validate the structure of parsed meals
+                    if (parsedMeals && parsedMeals.lunch && parsedMeals.dinner) {
+                        setMeals(parsedMeals);
+                    } else {
+                        // If structure is invalid, reset to default
+                        setMeals({
+                            lunch: Array(7).fill(''),
+                            dinner: Array(7).fill('')
+                        });
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing meals:', parseError);
+                    // Reset to default state if parsing fails
+                    setMeals({
+                        lunch: Array(7).fill(''),
+                        dinner: Array(7).fill('')
+                    });
+                }
+            } else {
+                // Reset to default state if no saved meals
+                setMeals({
+                    lunch: Array(7).fill(''),
+                    dinner: Array(7).fill('')
+                });
             }
-
-            // For an all-day event, end date is the next day.
-            const startDate = scheduleDate;
-            const endDateObj = new Date(scheduleDate);
-            endDateObj.setDate(endDateObj.getDate() + 1);
-            const endDate = endDateObj.toISOString().split('T')[0];
-
-            const eventObject = {
-                summary: `Meal: ${scheduledMeal.meal}`,
-                description: `Meal Type: ${mealType}`,
-                start: { date: startDate },
-                end: { date: endDate },
-            };
-
-            console.log("Creating event with object:", eventObject);
-            const createdEvent = await googleApi.createCalendarEvent(eventObject);
-            console.log("Created event:", createdEvent);
-
-            setSchedulingId(null);
-            setScheduleDate('');
-            setMealType('Lunch');
-            alert("Meal scheduled and added to Google Calendar!");
         } catch (error) {
-            console.error("Error scheduling meal or adding to calendar:", error);
-            alert("Error scheduling meal. Check console for details.");
+            console.error('Error loading meals:', error);
+            setMeals({
+                lunch: Array(7).fill(''),
+                dinner: Array(7).fill('')
+            });
         }
     };
 
-    const handleSignIn = async () => {
+    // Get week dates based on offset
+    const getWeekDates = (offset) => {
+        const today = new Date();
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(today.setDate(diff + (offset * 7)));
+
+        const dates = [];
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + i);
+            dates.push(date);
+        }
+        return dates;
+    };
+
+    const [weekDates, setWeekDates] = useState(getWeekDates(0));
+
+    // Handle auth state change
+    const handleAuthChange = ({ isAuthenticated, userId: newUserId }) => {
+        setUserId(newUserId);
+        if (isAuthenticated && newUserId) {
+            loadMealsForWeek(currentWeekOffset, newUserId);
+        } else {
+            // Reset state when logged out
+            setMeals({
+                lunch: Array(7).fill(''),
+                dinner: Array(7).fill('')
+            });
+            setEvents([]);
+        }
+    };
+
+    // Update week dates when offset changes
+    useEffect(() => {
+        setWeekDates(getWeekDates(currentWeekOffset));
+        if (userId) {
+            loadMealsForWeek(currentWeekOffset, userId);
+        }
+    }, [currentWeekOffset, userId]);
+
+    // Save meals
+    const saveMeals = () => {
+        if (!userId) {
+            setSaveStatus('Please login to save meals');
+            return;
+        }
+
         try {
-            const tokenResponse = await googleApi.handleAuthClick();
-            console.log("Sign in successful. Token response:", tokenResponse);
-            setIsSignedIn(true);
-            const info = await googleApi.getUserInfo();
-            setUserInfo(info);
-            console.log("User info:", info);
+            const weekKey = `meals_${userId}_${currentWeekOffset}`;
+            localStorage.setItem(weekKey, JSON.stringify(meals));
+            setSaveStatus('Saved successfully!');
+            setTimeout(() => setSaveStatus(''), 3000);
         } catch (error) {
-            console.error("Sign in error:", error);
+            console.error('Error saving meals:', error);
+            setSaveStatus('Failed to save meals');
         }
     };
 
-    const handleSignOut = () => {
-        googleApi.handleSignoutClick();
-        setIsSignedIn(false);
-        setUserInfo(null);
+    // Navigation functions
+    const previousWeek = () => setCurrentWeekOffset(prev => prev - 1);
+    const nextWeek = () => setCurrentWeekOffset(prev => prev + 1);
+    const goToCurrentWeek = () => setCurrentWeekOffset(0);
+
+    // Format date for display
+    const formatDate = (date) => {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    // Get day name
+    const getDayName = (date) => {
+        return date.toLocaleDateString('en-US', { weekday: 'short' });
+    };
+
+    // Handle meal updates
+    const updateMeal = (mealType, dayIndex, value) => {
+        setMeals(prev => ({
+            ...prev,
+            [mealType]: prev[mealType].map((meal, i) =>
+                i === dayIndex ? value : meal
+            )
+        }));
     };
 
     return (
-        <div style={{ marginTop: '2rem' }}>
-            <h2>Meal Planner</h2>
-            {userInfo && (
-                <p style={{ fontWeight: 'bold' }}>Logged in as: {userInfo.name}</p>
-            )}
-            <form onSubmit={handleAddMeal}>
-                <input
-                    type="text"
-                    placeholder="Enter full dish name (e.g., chicken with potato)"
-                    value={meal}
-                    onChange={(e) => setMeal(e.target.value)}
-                    style={{ padding: '0.5rem', marginRight: '0.5rem' }}
-                />
-                <button type="submit" style={{ padding: '0.5rem 1rem' }}>
-                    Add Meal
-                </button>
-            </form>
+        <div className="w-full max-w-6xl mx-auto my-8 bg-white rounded-lg shadow-lg">
+            <div className="p-6">
+                {/* Header with Auth */}
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-2">
+                        <Calendar className="h-6 w-6" />
+                        <h2 className="text-2xl font-bold">Weekly Meal Planner</h2>
+                    </div>
+                    <Auth onAuthChange={handleAuthChange} />
+                </div>
 
-            <h3 style={{ marginTop: '1rem' }}>Meal Entries:</h3>
-            <ul>
-                {mealEntries.map((entry) => (
-                    <li key={entry.id} style={{ marginBottom: '1rem' }}>
-                        <div>
-                            <strong>{entry.meal}</strong>
-                            {entry.schedule ? (
-                                <span>
-                  {' '}
-                                    - Scheduled on {new Date(entry.schedule.date).toLocaleDateString()} for {entry.schedule.mealType}
-                </span>
-                            ) : (
-                                <span> - Not scheduled</span>
-                            )}
-                        </div>
-                        {!entry.schedule && (
-                            <button
-                                onClick={() => startScheduling(entry.id)}
-                                style={{ marginTop: '0.5rem' }}
-                            >
-                                Schedule Meal
-                            </button>
-                        )}
-                        {schedulingId === entry.id && (
-                            <form
-                                onSubmit={handleScheduleSubmit}
-                                style={{ marginTop: '0.5rem' }}
-                            >
-                                <div>
-                                    <label>
-                                        Date:{' '}
-                                        <input
-                                            type="date"
-                                            value={scheduleDate}
-                                            onChange={(e) => setScheduleDate(e.target.value)}
-                                            required
-                                        />
-                                    </label>
-                                </div>
-                                <div style={{ marginTop: '0.5rem' }}>
-                                    <label>
-                                        Meal Type:{' '}
-                                        <select
-                                            value={mealType}
-                                            onChange={(e) => setMealType(e.target.value)}
-                                        >
-                                            <option value="Lunch">Lunch</option>
-                                            <option value="Dinner">Dinner</option>
-                                        </select>
-                                    </label>
-                                </div>
-                                <button type="submit" style={{ marginTop: '0.5rem' }}>
-                                    Confirm Scheduling
-                                </button>
-                            </form>
-                        )}
-                    </li>
-                ))}
-            </ul>
-            <div style={{ marginTop: '1rem' }}>
-                {userInfo ? (
-                    <button onClick={handleSignOut}>Sign Out</button>
-                ) : (
-                    <button onClick={handleSignIn}>Sign In with Google</button>
-                )}
+                {/* Week Navigation */}
+                <div className="flex justify-between items-center mb-6">
+                    <button
+                        onClick={previousWeek}
+                        className="flex items-center gap-1 px-3 py-2 bg-gray-100 rounded hover:bg-gray-200"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous Week
+                    </button>
+
+                    <button
+                        onClick={goToCurrentWeek}
+                        className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    >
+                        Current Week
+                    </button>
+
+                    <button
+                        onClick={nextWeek}
+                        className="flex items-center gap-1 px-3 py-2 bg-gray-100 rounded hover:bg-gray-200"
+                    >
+                        Next Week
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {/* Save Button and Status */}
+                <div className="flex justify-end items-center gap-4 mb-4">
+                    {saveStatus && (
+                        <span className={`text-sm ${saveStatus.includes('Failed') ? 'text-red-500' : 'text-green-500'}`}>
+              {saveStatus}
+            </span>
+                    )}
+                    <button
+                        onClick={saveMeals}
+                        className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                    >
+                        <Save className="h-4 w-4" />
+                        Save Meals
+                    </button>
+                </div>
+
+                {/* Calendar Table */}
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                        <tr>
+                            <th className="p-2 border-b">Date</th>
+                            {weekDates.map((date, index) => (
+                                <th key={index} className="p-2 border-b text-center">
+                                    <div>{getDayName(date)}</div>
+                                    <div className="text-sm text-gray-500">{formatDate(date)}</div>
+                                </th>
+                            ))}
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td className="p-2 border-b flex items-center gap-2">
+                                <Users className="h-4 w-4" />
+                                Plans
+                            </td>
+                            {weekDates.map((_, index) => (
+                                <td key={index} className="p-2 border-b text-center">
+                                    {events[index]?.title || '-'}
+                                </td>
+                            ))}
+                        </tr>
+                        <tr>
+                            <td className="p-2 border-b flex items-center gap-2">
+                                <Coffee className="h-4 w-4" />
+                                Lunch
+                            </td>
+                            {weekDates.map((_, index) => (
+                                <td key={index} className="p-2 border-b">
+                                    <input
+                                        type="text"
+                                        value={meals.lunch[index] || ''}
+                                        onChange={(e) => updateMeal('lunch', index, e.target.value)}
+                                        className="w-full p-1 border rounded"
+                                        placeholder="Add meal..."
+                                    />
+                                </td>
+                            ))}
+                        </tr>
+                        <tr>
+                            <td className="p-2 border-b flex items-center gap-2">
+                                <Moon className="h-4 w-4" />
+                                Dinner
+                            </td>
+                            {weekDates.map((_, index) => (
+                                <td key={index} className="p-2 border-b">
+                                    <input
+                                        type="text"
+                                        value={meals.dinner[index] || ''}
+                                        onChange={(e) => updateMeal('dinner', index, e.target.value)}
+                                        className="w-full p-1 border rounded"
+                                        placeholder="Add meal..."
+                                    />
+                                </td>
+                            ))}
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );

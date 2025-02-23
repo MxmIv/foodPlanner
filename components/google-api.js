@@ -1,94 +1,31 @@
-const DISCOVERY_DOCS = [
-    "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-];
+// google-api.js
+import { google } from 'googleapis';
 
-const googleApi = {
-    initGapi: () => {
-        return new Promise((resolve, reject) => {
-            if (!window.gapi) {
-                reject("Google API not loaded.");
-                return;
-            }
+export const getGoogleCalendarEvents = async (auth) => {
+    try {
+        const calendar = google.calendar({ version: 'v3', auth });
 
-            window.gapi.load("client", async () => {
-                try {
-                    await window.gapi.client.init({
-                        apiKey: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
-                        discoveryDocs: DISCOVERY_DOCS,
-                    });
-                    resolve();
-                } catch (error) {
-                    console.error("Error initializing Google API:", error);
-                    reject(error);
-                }
-            });
+        // Get start and end of current week
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        endOfWeek.setHours(23, 59, 59, 999);
+
+        const response = await calendar.events.list({
+            calendarId: 'primary',
+            timeMin: startOfWeek.toISOString(),
+            timeMax: endOfWeek.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
         });
-    },
 
-    handleAuthClick: async () => {
-        try {
-            if (!window.gapi?.client) await googleApi.initGapi();
-            return new Promise((resolve, reject) => {
-                const tokenClient = window.google.accounts.oauth2.initTokenClient({
-                    client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-                    scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.profile",
-                    callback: (resp) => (resp.error ? reject(resp) : resolve(resp)),
-                });
-                tokenClient.requestAccessToken({ prompt: "consent" });
-            });
-        } catch (error) {
-            console.error("Google Auth Error:", error);
-            throw error;
-        }
-    },
-
-    handleSignoutClick: () => {
-        if (window.gapi?.client.getToken()) {
-            window.google.accounts.oauth2.revoke(window.gapi.client.getToken().access_token);
-            window.gapi.client.setToken(null);
-        }
-    },
-
-    listUpcomingEvents: async () => {
-        if (!window.gapi?.client?.calendar) await googleApi.initGapi();
-        try {
-            console.log("Fetching upcoming Google Calendar events...");
-            const response = await window.gapi.client.calendar.events.list({
-                calendarId: "primary",
-                timeMin: new Date().toISOString(),
-                showDeleted: false,
-                singleEvents: true,
-                maxResults: 50,
-                orderBy: "startTime",
-            });
-            console.log("Fetched Google Calendar events:", response.result.items);
-            return response.result.items;
-        } catch (error) {
-            console.error("Error fetching calendar events:", error);
-            return [];
-        }
-    },
-
-    getUserInfo: async () => {
-        if (!window.gapi || !window.gapi.client.getToken()) {
-            console.warn("gapi client not ready or no token available");
-            return null;
-        }
-
-        const token = window.gapi.client.getToken().access_token;
-        try {
-            console.log("Fetching user info from Google...");
-            const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            const userInfo = await response.json();
-            console.log("Fetched user info:", userInfo);
-            return userInfo;
-        } catch (error) {
-            console.error("Error fetching user info:", error);
-            return null;
-        }
-    },
+        return response.data.items;
+    } catch (error) {
+        console.error('Error fetching calendar events:', error);
+        return [];
+    }
 };
-
-export { googleApi };

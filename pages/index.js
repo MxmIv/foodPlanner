@@ -1,22 +1,18 @@
-import React, { useState } from "react";
-import GoogleSignIn from "../components/GoogleSignIn";
-import CalendarView from "../components/CalendarView";
-import MealEntryPanel from "../components/MealEntryPanel";
+// pages/index.js
+import Head from 'next/head';
+import MealPlanner from '../components/meal-planner';
 
 export default function Home() {
-    const [isSignedIn, setIsSignedIn] = useState(false);
-    const [mealEntries, setMealEntries] = useState({});
-    const [userId, setUserId] = useState(null); // ✅ Store Google User ID
-
     return (
-        <div style={{ display: "flex", gap: "2rem", padding: "2rem" }}>
-            <div style={{ flex: "1", minWidth: "300px" }}>
-                <GoogleSignIn setIsSignedIn={setIsSignedIn} setUserId={setUserId} />
-                <MealEntryPanel onMealChange={setMealEntries} userId={userId} />
-            </div>
-            <div style={{ flex: "2", minWidth: "600px" }}>
-                <CalendarView isSignedIn={isSignedIn} mealEntries={mealEntries} />
-            </div>
+        <div className="min-h-screen bg-gray-50">
+            <Head>
+                <title>Meal Planner</title>
+                <link rel="icon" href="/favicon.ico" />
+            </Head>
+
+            <main className="container mx-auto px-4 py-8">
+                <MealPlanner />
+            </main>
         </div>
     );
 }
