@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
-import { googleApi } from './google-api';
+import { googleApi } from '@components/google-api';
 
 const CalendarView = ({ isSignedIn, calendarRefreshCounter }) => {
     const [events, setEvents] = useState([]);

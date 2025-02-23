@@ -1,6 +1,6 @@
 // meal-planner.js
 import { useState, useEffect } from 'react';
-import { googleApi } from './google-api';
+import { googleApi } from '@components/google-api';
 
 const MealPlanner = ({ setIsSignedIn }) => {
     const [meal, setMeal] = useState('');
