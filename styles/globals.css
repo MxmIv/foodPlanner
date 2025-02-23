@@ -12,10 +12,9 @@ body {
 }
 
 main {
-  padding: 2rem 0; /* Reduced from 5rem */
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  padding: 2rem; /* Use padding instead of just vertical padding */
+  width: 100%; /* Ensure full width */
+  display: block; /* or remove display entirely */
 }
 
 code {
@@ -26,7 +25,7 @@ code {
 }
 
 .container {
-  min-height: 100vh; /* Changed from height to min-height */
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }

@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { History } from 'lucide-react';
+import { History, Utensils, Moon } from 'lucide-react';
 
 const MealHistory = ({ userId }) => {
     const [mealHistory, setMealHistory] = useState([]);
@@ -94,15 +94,18 @@ const MealHistory = ({ userId }) => {
         });
     };
 
+    // Group meals by type
+    const lunchMeals = mealHistory.filter(item => item.type === 'lunch');
+    const dinnerMeals = mealHistory.filter(item => item.type === 'dinner');
+
     // Prevent excessive rendering if no userId
     if (!userId) return null;
-
     return (
         <div className="w-full bg-white rounded-lg shadow-lg">
             <div className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                    <History className="h-5 w-5" />
-                    <h3 className="text-xl font-semibold">Meal History</h3>
+                <div className="flex items-center gap-2 mb-6">
+                    <History className="h-6 w-6 text-gray-700" />
+                    <h3 className="text-2xl font-bold text-gray-800">Meal History</h3>
                 </div>
 
                 {isLoading ? (
@@ -110,18 +113,79 @@ const MealHistory = ({ userId }) => {
                 ) : mealHistory.length === 0 ? (
                     <div className="text-center text-gray-500 py-4">No meal history available</div>
                 ) : (
-                    <div className="max-h-[400px] overflow-y-auto">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {mealHistory.map((item, index) => (
-                                <div
-                                    key={index}
-                                    className="p-3 bg-white rounded shadow-sm border border-gray-100"
-                                >
-                                    <div className="text-sm text-gray-500">{formatDate(item.date)}</div>
-                                    <div className="font-medium">{item.meal}</div>
-                                    <div className="text-sm text-gray-500 capitalize">{item.type}</div>
-                                </div>
-                            ))}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        width: '100%'
+                    }}>
+                        {/* Lunch Column */}
+                        <div style={{ width: '48%' }}>
+                            <div className="flex items-center gap-2 mb-4">
+                                <Utensils className="h-5 w-5 text-green-600" />
+                                <h4 className="text-xl font-semibold text-gray-700">Lunch History</h4>
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                    <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
+                                    <th style={{ padding: '8px', textAlign: 'left' }}>Day</th>
+                                    <th style={{ padding: '8px', textAlign: 'left' }}>Meal</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {lunchMeals.map((item, index) => (
+                                    <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                        <td style={{ padding: '8px' }}>
+                                            {item.date.toLocaleDateString('en-US', {
+                                                month: 'short',
+                                                day: 'numeric'
+                                            })}
+                                        </td>
+                                        <td style={{ padding: '8px' }}>
+                                            {item.date.toLocaleDateString('en-US', {
+                                                weekday: 'short'
+                                            })}
+                                        </td>
+                                        <td style={{ padding: '8px' }}>{item.meal}</td>
+                                    </tr>
+                                ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Dinner Column */}
+                        <div style={{ width: '48%' }}>
+                            <div className="flex items-center gap-2 mb-4">
+                                <Moon className="h-5 w-5 text-indigo-600" />
+                                <h4 className="text-xl font-semibold text-gray-700">Dinner History</h4>
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                    <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
+                                    <th style={{ padding: '8px', textAlign: 'left' }}>Day</th>
+                                    <th style={{ padding: '8px', textAlign: 'left' }}>Meal</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {dinnerMeals.map((item, index) => (
+                                    <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                        <td style={{ padding: '8px' }}>
+                                            {item.date.toLocaleDateString('en-US', {
+                                                month: 'short',
+                                                day: 'numeric'
+                                            })}
+                                        </td>
+                                        <td style={{ padding: '8px' }}>
+                                            {item.date.toLocaleDateString('en-US', {
+                                                weekday: 'short'
+                                            })}
+                                        </td>
+                                        <td style={{ padding: '8px' }}>{item.meal}</td>
+                                    </tr>
+                                ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 )}
