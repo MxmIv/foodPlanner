@@ -35,9 +35,16 @@ const MealPlanner = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Load calendar events for the week
     const loadEventsForWeek = async () => {
-        if (!userId || !window.gapi?.client?.calendar) return;
+        // Add more comprehensive check for Google Calendar API
+        if (!userId || !window.gapi?.client?.calendar) {
+            console.log('Google Calendar API not ready:', {
+                userId: !!userId,
+                gapiClient: !!window.gapi?.client,
+                calendarApi: !!window.gapi?.client?.calendar
+            });
+            return;
+        }
 
         setIsLoading(true);
         setError(null);
@@ -50,6 +57,11 @@ const MealPlanner = () => {
             const weekEnd = new Date(weekDates[6]);
             weekEnd.setHours(23, 59, 59, 999);
 
+            console.log('Fetching events for:', {
+                weekStart: weekStart.toISOString(),
+                weekEnd: weekEnd.toISOString()
+            });
+
             const response = await window.gapi.client.calendar.events.list({
                 calendarId: 'primary',
                 timeMin: weekStart.toISOString(),
@@ -57,6 +69,9 @@ const MealPlanner = () => {
                 singleEvents: true,
                 orderBy: 'startTime'
             });
+
+            // Add more detailed logging
+            console.log('Calendar events response:', response);
 
             // Map each calendar event to its corresponding day
             const weekEvents = weekDates.map(date => {
@@ -77,6 +92,7 @@ const MealPlanner = () => {
                     : null;
             });
 
+            console.log('Processed week events:', weekEvents);
             setEvents(weekEvents);
         } catch (error) {
             console.error('Error loading calendar events:', error);
@@ -138,11 +154,17 @@ const MealPlanner = () => {
         setWeekDates(getWeekDates(currentWeekOffset));
     }, [currentWeekOffset]);
 
-    // Load events and meals when dates or userId changes
     useEffect(() => {
         if (userId) {
+            // Load meals first, then load events
             loadMealsForWeek(currentWeekOffset, userId);
-            loadEventsForWeek();
+
+            // Add a small delay to ensure Google API is fully initialized
+            const loadEventsTimer = setTimeout(() => {
+                loadEventsForWeek();
+            }, 250);
+
+            return () => clearTimeout(loadEventsTimer);
         }
     }, [weekDates, userId]);
 
