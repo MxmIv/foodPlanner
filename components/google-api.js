@@ -18,6 +18,7 @@ const googleApi = {
                     });
                     resolve();
                 } catch (error) {
+                    console.error("Error initializing Google API:", error);
                     reject(error);
                 }
             });
@@ -36,6 +37,7 @@ const googleApi = {
                 tokenClient.requestAccessToken({ prompt: "consent" });
             });
         } catch (error) {
+            console.error("Google Auth Error:", error);
             throw error;
         }
     },
@@ -50,6 +52,7 @@ const googleApi = {
     listUpcomingEvents: async () => {
         if (!window.gapi?.client?.calendar) await googleApi.initGapi();
         try {
+            console.log("Fetching upcoming Google Calendar events...");
             const response = await window.gapi.client.calendar.events.list({
                 calendarId: "primary",
                 timeMin: new Date().toISOString(),
@@ -58,8 +61,10 @@ const googleApi = {
                 maxResults: 50,
                 orderBy: "startTime",
             });
+            console.log("Fetched Google Calendar events:", response.result.items);
             return response.result.items;
         } catch (error) {
+            console.error("Error fetching calendar events:", error);
             return [];
         }
     },
@@ -72,10 +77,13 @@ const googleApi = {
 
         const token = window.gapi.client.getToken().access_token;
         try {
+            console.log("Fetching user info from Google...");
             const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            return await response.json();
+            const userInfo = await response.json();
+            console.log("Fetched user info:", userInfo);
+            return userInfo;
         } catch (error) {
             console.error("Error fetching user info:", error);
             return null;

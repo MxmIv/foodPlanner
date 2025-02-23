@@ -1,8 +1,21 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
-const MealEntryPanel = ({ onMealChange }) => {
+const MealEntryPanel = ({ onMealChange, userId }) => {
     const [mealEntries, setMealEntries] = useState({});
 
+    // ✅ Load meals from localStorage when user logs in
+    useEffect(() => {
+        if (userId) {
+            const savedMeals = localStorage.getItem(`meals_${userId}`);
+            if (savedMeals) {
+                const parsedMeals = JSON.parse(savedMeals);
+                setMealEntries(parsedMeals);
+                onMealChange(parsedMeals);
+            }
+        }
+    }, [userId]);
+
+    // ✅ Save meals to localStorage when user enters a meal
     const handleInputChange = (date, mealType, value) => {
         const updatedMeals = {
             ...mealEntries,
@@ -10,6 +23,10 @@ const MealEntryPanel = ({ onMealChange }) => {
         };
         setMealEntries(updatedMeals);
         onMealChange(updatedMeals);
+
+        if (userId) {
+            localStorage.setItem(`meals_${userId}`, JSON.stringify(updatedMeals));
+        }
     };
 
     return (
@@ -36,6 +53,7 @@ const MealEntryPanel = ({ onMealChange }) => {
                             <td>
                                 <input
                                     type="text"
+                                    placeholder="Enter lunch"
                                     value={mealEntries[formattedDate]?.lunch || ""}
                                     onChange={(e) =>
                                         handleInputChange(formattedDate, "lunch", e.target.value)
@@ -45,6 +63,7 @@ const MealEntryPanel = ({ onMealChange }) => {
                             <td>
                                 <input
                                     type="text"
+                                    placeholder="Enter dinner"
                                     value={mealEntries[formattedDate]?.dinner || ""}
                                     onChange={(e) =>
                                         handleInputChange(formattedDate, "dinner", e.target.value)

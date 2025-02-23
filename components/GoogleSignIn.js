@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { googleApi } from "./google-api";
 
-const GoogleSignIn = ({ setIsSignedIn }) => {
+const GoogleSignIn = ({ setIsSignedIn, setUserId }) => {
     const [userInfo, setUserInfo] = useState(null);
 
     useEffect(() => {
         googleApi.initGapi().then(() => {
             if (window.gapi?.client?.getToken()) {
                 setIsSignedIn(true);
-                googleApi.getUserInfo().then(setUserInfo);
+                googleApi.getUserInfo().then((info) => {
+                    setUserInfo(info);
+                    setUserId(info.sub); // ✅ Save Google User ID
+                });
             }
         }).catch(error => {
             console.error("Google API init error:", error);
@@ -21,6 +24,7 @@ const GoogleSignIn = ({ setIsSignedIn }) => {
             setIsSignedIn(true);
             const info = await googleApi.getUserInfo();
             setUserInfo(info);
+            setUserId(info.sub); // ✅ Save Google User ID
         } catch (error) {
             console.error("Sign-in error:", error);
         }
@@ -30,6 +34,7 @@ const GoogleSignIn = ({ setIsSignedIn }) => {
         googleApi.handleSignoutClick();
         setIsSignedIn(false);
         setUserInfo(null);
+        setUserId(null);
     };
 
     return (
