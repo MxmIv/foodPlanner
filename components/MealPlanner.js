@@ -6,16 +6,88 @@ import { Calendar, Users, Coffee, Moon, ChevronLeft, ChevronRight, Save } from '
 import Auth from './Auth';
 
 const MealPlanner = () => {
+    const getWeekDates = (offset = 0) => {
+        const now = new Date();
+
+        // Get Monday of current week
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (now.getDay() - 1) + (offset * 7));
+        monday.setHours(0, 0, 0, 0);
+
+        // Generate week dates starting from Monday
+        return Array.from({ length: 7 }, (_, index) => {
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + index);
+            return date;
+        });
+    };
+
+    // State declarations
     const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
     const [userId, setUserId] = useState(null);
     const [meals, setMeals] = useState({
         lunch: Array(7).fill(''),
         dinner: Array(7).fill('')
     });
-    const [events, setEvents] = useState([]);
+    const [weekDates, setWeekDates] = useState(getWeekDates(0));
+    const [events, setEvents] = useState(Array(7).fill(null));
     const [saveStatus, setSaveStatus] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
 
-    // Load meals for specific week
+    // Load calendar events for the week
+    const loadEventsForWeek = async () => {
+        if (!userId || !window.gapi?.client?.calendar) return;
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Get start and end of week
+            const weekStart = new Date(weekDates[0]);
+            weekStart.setHours(0, 0, 0, 0);
+
+            const weekEnd = new Date(weekDates[6]);
+            weekEnd.setHours(23, 59, 59, 999);
+
+            const response = await window.gapi.client.calendar.events.list({
+                calendarId: 'primary',
+                timeMin: weekStart.toISOString(),
+                timeMax: weekEnd.toISOString(),
+                singleEvents: true,
+                orderBy: 'startTime'
+            });
+
+            // Map each calendar event to its corresponding day
+            const weekEvents = weekDates.map(date => {
+                const dayEvents = response.result.items.filter(event => {
+                    const eventStart = new Date(event.start.dateTime || event.start.date);
+                    return (
+                        eventStart.getDate() === date.getDate() &&
+                        eventStart.getMonth() === date.getMonth() &&
+                        eventStart.getFullYear() === date.getFullYear()
+                    );
+                });
+
+                return dayEvents.length > 0
+                    ? {
+                        title: dayEvents.map(e => e.summary || 'Untitled Event').join(', '),
+                        events: dayEvents
+                    }
+                    : null;
+            });
+
+            setEvents(weekEvents);
+        } catch (error) {
+            console.error('Error loading calendar events:', error);
+            setError('Failed to load calendar events');
+            setEvents(Array(7).fill(null));
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Load meals for the week from localStorage
     const loadMealsForWeek = (weekOffset, currentUserId) => {
         if (!currentUserId) return;
 
@@ -23,34 +95,35 @@ const MealPlanner = () => {
             const weekKey = `meals_${currentUserId}_${weekOffset}`;
             const savedMeals = localStorage.getItem(weekKey);
 
+            // Always initialize a fresh 7-day array, then overlay saved meals if they exist
+            const freshMeals = {
+                lunch: Array(7).fill(''),
+                dinner: Array(7).fill('')
+            };
+
             if (savedMeals) {
-                try {
-                    const parsedMeals = JSON.parse(savedMeals);
-                    // Validate the structure of parsed meals
-                    if (parsedMeals && parsedMeals.lunch && parsedMeals.dinner) {
-                        setMeals(parsedMeals);
-                    } else {
-                        // If structure is invalid, reset to default
-                        setMeals({
-                            lunch: Array(7).fill(''),
-                            dinner: Array(7).fill('')
-                        });
-                    }
-                } catch (parseError) {
-                    console.error('Error parsing meals:', parseError);
-                    // Reset to default state if parsing fails
-                    setMeals({
-                        lunch: Array(7).fill(''),
-                        dinner: Array(7).fill('')
+                const parsedMeals = JSON.parse(savedMeals);
+
+                // Safely copy saved meals, ensuring we don't go out of bounds
+                if (parsedMeals?.lunch) {
+                    parsedMeals.lunch.forEach((meal, index) => {
+                        if (index < 7) {
+                            freshMeals.lunch[index] = meal || '';
+                        }
                     });
                 }
-            } else {
-                // Reset to default state if no saved meals
-                setMeals({
-                    lunch: Array(7).fill(''),
-                    dinner: Array(7).fill('')
-                });
+
+                if (parsedMeals?.dinner) {
+                    parsedMeals.dinner.forEach((meal, index) => {
+                        if (index < 7) {
+                            freshMeals.dinner[index] = meal || '';
+                        }
+                    });
+                }
             }
+
+            // Set the meals, ensuring a full 7-day array
+            setMeals(freshMeals);
         } catch (error) {
             console.error('Error loading meals:', error);
             setMeals({
@@ -60,46 +133,33 @@ const MealPlanner = () => {
         }
     };
 
-    // Get week dates based on offset
-    const getWeekDates = (offset) => {
-        const today = new Date();
-        const day = today.getDay();
-        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(today.setDate(diff + (offset * 7)));
+    // Update week dates and load data when offset changes
+    useEffect(() => {
+        setWeekDates(getWeekDates(currentWeekOffset));
+    }, [currentWeekOffset]);
 
-        const dates = [];
-        for (let i = 0; i < 7; i++) {
-            const date = new Date(monday);
-            date.setDate(monday.getDate() + i);
-            dates.push(date);
+    // Load events and meals when dates or userId changes
+    useEffect(() => {
+        if (userId) {
+            loadMealsForWeek(currentWeekOffset, userId);
+            loadEventsForWeek();
         }
-        return dates;
-    };
-
-    const [weekDates, setWeekDates] = useState(getWeekDates(0));
+    }, [weekDates, userId]);
 
     // Handle auth state change
-    const handleAuthChange = ({ isAuthenticated, userId: newUserId }) => {
+    const handleAuthChange = async ({ isAuthenticated, userId: newUserId }) => {
         setUserId(newUserId);
         if (isAuthenticated && newUserId) {
             loadMealsForWeek(currentWeekOffset, newUserId);
+            await loadEventsForWeek();
         } else {
-            // Reset state when logged out
             setMeals({
                 lunch: Array(7).fill(''),
                 dinner: Array(7).fill('')
             });
-            setEvents([]);
+            setEvents(Array(7).fill(null));
         }
     };
-
-    // Update week dates when offset changes
-    useEffect(() => {
-        setWeekDates(getWeekDates(currentWeekOffset));
-        if (userId) {
-            loadMealsForWeek(currentWeekOffset, userId);
-        }
-    }, [currentWeekOffset, userId]);
 
     // Save meals
     const saveMeals = () => {
@@ -143,9 +203,24 @@ const MealPlanner = () => {
             )
         }));
     };
+    useEffect(() => {
+        console.log('MealPlanner: Rendering component');
+        console.log('Current userId:', userId);
+    }, []);
+
+
+    // Auto-save effect
+    useEffect(() => {
+        if (userId) {
+            const timeoutId = setTimeout(() => {
+                saveMeals();
+            }, 1000);
+            return () => clearTimeout(timeoutId);
+        }
+    }, [meals, userId, currentWeekOffset]);
 
     return (
-        <div className="w-full max-w-6xl mx-auto my-8 bg-white rounded-lg shadow-lg">
+        <div className="w-full bg-white rounded-lg shadow-lg">
             <div className="p-6">
                 {/* Header with Auth */}
                 <div className="flex justify-between items-center mb-6">
@@ -155,6 +230,13 @@ const MealPlanner = () => {
                     </div>
                     <Auth onAuthChange={handleAuthChange} />
                 </div>
+
+                {/* Error Display */}
+                {error && (
+                    <div className="bg-red-50 text-red-500 p-3 rounded-md mb-4">
+                        {error}
+                    </div>
+                )}
 
                 {/* Week Navigation */}
                 <div className="flex justify-between items-center mb-6">
@@ -186,8 +268,8 @@ const MealPlanner = () => {
                 <div className="flex justify-end items-center gap-4 mb-4">
                     {saveStatus && (
                         <span className={`text-sm ${saveStatus.includes('Failed') ? 'text-red-500' : 'text-green-500'}`}>
-              {saveStatus}
-            </span>
+                            {saveStatus}
+                        </span>
                     )}
                     <button
                         onClick={saveMeals}
@@ -220,7 +302,11 @@ const MealPlanner = () => {
                             </td>
                             {weekDates.map((_, index) => (
                                 <td key={index} className="p-2 border-b text-center">
-                                    {events[index]?.title || '-'}
+                                    {isLoading ? (
+                                        <span className="text-gray-400">Loading...</span>
+                                    ) : (
+                                        events[index]?.title || '-'
+                                    )}
                                 </td>
                             ))}
                         </tr>
