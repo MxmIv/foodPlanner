@@ -14,32 +14,40 @@ export default function AuthCallback() {
     const router = useRouter()
 
     useEffect(() => {
-        const handleCallback = async () => {
-            const { code, error } = router.query
-
-            if (error) {
-                console.error('OAuth error:', error)
-                await router.push('/test-google?error=' + error)
-                return
-            }
-
-            if (code) {
+        // Check if we have a hash in the URL
+        if (window.location.hash) {
+            // Handle the redirect automatically
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                    router.push('/test-google')
+                }
+            })
+        } else {
+            const handleCallback = async () => {
                 try {
-                    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-                    if (error) throw error
+                    const { code, error } = router.query
 
-                    // Successful authentication
+                    if (error) {
+                        console.error('OAuth error:', error)
+                        await router.push('/test-google?error=' + error)
+                        return
+                    }
+
+                    if (code) {
+                        const { error } = await supabase.auth.exchangeCodeForSession(code)
+                        if (error) throw error
+                    }
+
                     await router.push('/test-google')
                 } catch (e) {
                     console.error('Session error:', e)
                     await router.push('/test-google?error=session')
                 }
             }
-        }
 
-        // Only run if we have query params
-        if (router.isReady) {
-            handleCallback()
+            if (router.isReady) {
+                handleCallback()
+            }
         }
     }, [router.isReady, router.query])
 
