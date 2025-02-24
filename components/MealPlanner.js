@@ -1,5 +1,13 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Coffee, Moon, ChevronLeft, ChevronRight, Save } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 const MealPlanner = ({ userId }) => {
     const getWeekDates = (offset = 0) => {
@@ -24,6 +32,7 @@ const MealPlanner = ({ userId }) => {
     const [saveStatus, setSaveStatus] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [isGoogleApiReady, setIsGoogleApiReady] = useState(false);
 
     const loadEventsForWeek = async () => {
         if (!userId || !window.gapi?.client || !window.gapi.client.getToken()) {
@@ -50,7 +59,6 @@ const MealPlanner = ({ userId }) => {
                 weekEnd: weekEnd.toISOString()
             });
 
-            // Ensure we have a valid access token
             const token = window.gapi.client.getToken();
             if (!token) {
                 throw new Error('No valid token available');
@@ -92,48 +100,50 @@ const MealPlanner = ({ userId }) => {
         }
     };
 
-    const loadMealsForWeek = () => {
+    const loadMealsForWeek = async () => {
         if (!userId) return;
 
         try {
-            const weekKey = `meals_${userId}_${currentWeekOffset}`;
-            const savedMeals = localStorage.getItem(weekKey);
+            setIsLoading(true);
+            setError(null);
+
+            const { data, error } = await supabase
+                .from('meal_plans')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('week_offset', currentWeekOffset)
+                .single();
+
+            if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+                throw error;
+            }
 
             const freshMeals = {
                 lunch: Array(7).fill(''),
                 dinner: Array(7).fill('')
             };
 
-            if (savedMeals) {
-                const parsedMeals = JSON.parse(savedMeals);
-                if (parsedMeals?.lunch) {
-                    parsedMeals.lunch.forEach((meal, index) => {
-                        if (index < 7) freshMeals.lunch[index] = meal || '';
-                    });
-                }
-                if (parsedMeals?.dinner) {
-                    parsedMeals.dinner.forEach((meal, index) => {
-                        if (index < 7) freshMeals.dinner[index] = meal || '';
-                    });
-                }
+            if (data) {
+                freshMeals.lunch = Array.isArray(data.lunch) ? data.lunch : Array(7).fill('');
+                freshMeals.dinner = Array.isArray(data.dinner) ? data.dinner : Array(7).fill('');
             }
 
             setMeals(freshMeals);
         } catch (error) {
             console.error('Error loading meals:', error);
+            setError('Failed to load meals: ' + error.message);
             setMeals({
                 lunch: Array(7).fill(''),
                 dinner: Array(7).fill('')
             });
+        } finally {
+            setIsLoading(false);
         }
     };
 
     useEffect(() => {
         setWeekDates(getWeekDates(currentWeekOffset));
     }, [currentWeekOffset]);
-
-    // Add new state for API initialization
-    const [isGoogleApiReady, setIsGoogleApiReady] = useState(false);
 
     // Check Google API initialization
     useEffect(() => {
@@ -143,21 +153,17 @@ const MealPlanner = ({ userId }) => {
             return isReady;
         };
 
-        // Initial check
         if (!checkGoogleApiReady()) {
-            // If not ready, set up an interval to check
             const intervalId = setInterval(() => {
                 if (checkGoogleApiReady()) {
                     clearInterval(intervalId);
                 }
-            }, 100); // Check every 100ms
+            }, 100);
 
-            // Cleanup
             return () => clearInterval(intervalId);
         }
     }, [userId]);
 
-    // Load data when ready
     useEffect(() => {
         if (userId && isGoogleApiReady) {
             loadMealsForWeek();
@@ -165,20 +171,34 @@ const MealPlanner = ({ userId }) => {
         }
     }, [weekDates, userId, isGoogleApiReady]);
 
-    const saveMeals = () => {
+    const saveMeals = async () => {
         if (!userId) {
             setSaveStatus('Please login to save meals');
             return;
         }
 
         try {
-            const weekKey = `meals_${userId}_${currentWeekOffset}`;
-            localStorage.setItem(weekKey, JSON.stringify(meals));
+            setSaveStatus('Saving...');
+            setError(null);
+
+            const { error } = await supabase
+                .from('meal_plans')
+                .upsert({
+                    user_id: userId,
+                    week_offset: currentWeekOffset,
+                    lunch: meals.lunch,
+                    dinner: meals.dinner,
+                    updated_at: new Date().toISOString()
+                });
+
+            if (error) throw error;
+
             setSaveStatus('Saved successfully!');
             setTimeout(() => setSaveStatus(''), 3000);
         } catch (error) {
             console.error('Error saving meals:', error);
-            setSaveStatus('Failed to save meals');
+            setError('Failed to save meals: ' + error.message);
+            setSaveStatus('Failed to save');
         }
     };
 
@@ -203,6 +223,7 @@ const MealPlanner = ({ userId }) => {
         }));
     };
 
+    // Auto-save effect
     useEffect(() => {
         if (userId) {
             const timeoutId = setTimeout(() => {
@@ -337,6 +358,19 @@ const MealPlanner = ({ userId }) => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Debug Info (only in development) */}
+                {process.env.NODE_ENV === 'development' && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded text-xs">
+                        <pre>
+                            {JSON.stringify({
+                                userId,
+                                currentWeekOffset,
+                                meals
+                            }, null, 2)}
+                        </pre>
+                    </div>
+                )}
             </div>
         </div>
     );
