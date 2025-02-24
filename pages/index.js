@@ -3,6 +3,8 @@ import Head from 'next/head';
 import MealPlanner from '@components/MealPlanner';
 import MealHistory from "@components/MealHistory";
 import Auth from '@components/Auth';
+import Footer from "@components/Footer";
+import Header from "@components/Header";
 
 export default function Home() {
     const [userId, setUserId] = useState(null);
@@ -14,13 +16,15 @@ export default function Home() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
             <Head>
                 <title>Meal Planner</title>
                 <link rel="icon" href="/favicon.ico" />
             </Head>
 
-            <main className="container mx-auto px-4 py-8">
+            <Header title="Meal Planner" />
+
+            <main className="container mx-auto px-4 py-8 flex-grow">
                 <div className="mb-4 flex justify-end">
                     <Auth onAuthChange={handleAuthChange} />
                 </div>
@@ -40,6 +44,8 @@ export default function Home() {
                     </div>
                 )}
             </main>
+
+            <Footer />
         </div>
     );
 }
