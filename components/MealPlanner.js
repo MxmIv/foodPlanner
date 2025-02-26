@@ -107,37 +107,116 @@ const MealPlanner = ({ userId }) => {
             setIsLoading(true);
             setError(null);
 
+            // Get start and end dates for the week
+            const weekStart = weekDates[0];
+            const weekEnd = weekDates[6];
+
             const { data, error } = await supabase
                 .from('meal_plans')
                 .select('*')
                 .eq('user_id', userId)
-                .eq('week_offset', currentWeekOffset)
-                .single();
+                .gte('meal_date', weekStart.toISOString().split('T')[0])
+                .lte('meal_date', weekEnd.toISOString().split('T')[0])
+                .order('meal_date', { ascending: true });
 
-            if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
-                throw error;
-            }
+            if (error) throw error;
 
+            // Initialize fresh meals structure
             const freshMeals = {
                 lunch: Array(7).fill(''),
                 dinner: Array(7).fill('')
             };
 
-            if (data) {
-                freshMeals.lunch = Array.isArray(data.lunch) ? data.lunch : Array(7).fill('');
-                freshMeals.dinner = Array.isArray(data.dinner) ? data.dinner : Array(7).fill('');
-            }
+            // Populate meals from database results
+            data.forEach(meal => {
+                const mealDate = new Date(meal.meal_date);
+                const dayIndex = weekDates.findIndex(date =>
+                    date.getDate() === mealDate.getDate() &&
+                    date.getMonth() === mealDate.getMonth() &&
+                    date.getFullYear() === mealDate.getFullYear()
+                );
+
+                if (dayIndex !== -1) {
+                    freshMeals[meal.meal_type][dayIndex] = meal.meal_name || '';
+                }
+            });
 
             setMeals(freshMeals);
         } catch (error) {
             console.error('Error loading meals:', error);
             setError('Failed to load meals: ' + error.message);
-            setMeals({
-                lunch: Array(7).fill(''),
-                dinner: Array(7).fill('')
-            });
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const saveMeals = async () => {
+        if (!userId) {
+            setSaveStatus('Please login to save meals');
+            return;
+        }
+
+        try {
+            setSaveStatus('Saving...');
+            setError(null);
+
+            // Prepare meal records for the week
+            const mealRecords = [];
+
+            weekDates.forEach((date, index) => {
+                const dateStr = date.toISOString().split('T')[0];
+
+                // Add lunch record if there's a meal
+                if (meals.lunch[index]) {
+                    mealRecords.push({
+                        user_id: userId,
+                        meal_date: dateStr,
+                        meal_type: 'lunch',
+                        meal_name: meals.lunch[index],
+                        updated_at: new Date().toISOString()
+                    });
+                }
+
+                // Add dinner record if there's a meal
+                if (meals.dinner[index]) {
+                    mealRecords.push({
+                        user_id: userId,
+                        meal_date: dateStr,
+                        meal_type: 'dinner',
+                        meal_name: meals.dinner[index],
+                        updated_at: new Date().toISOString()
+                    });
+                }
+            });
+
+            // Delete existing records for this week
+            const weekStart = weekDates[0].toISOString().split('T')[0];
+            const weekEnd = weekDates[6].toISOString().split('T')[0];
+
+            const { error: deleteError } = await supabase
+                .from('meal_plans')
+                .delete()
+                .eq('user_id', userId)
+                .gte('meal_date', weekStart)
+                .lte('meal_date', weekEnd);
+
+            if (deleteError) throw deleteError;
+
+            // Insert new records
+            if (mealRecords.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('meal_plans')
+                    .insert(mealRecords);
+
+                if (insertError) throw insertError;
+            }
+
+            setSaveStatus('Saved successfully!');
+            setTimeout(() => setSaveStatus(''), 3000);
+        } catch (error) {
+            console.error('Error saving meals:', error);
+            setError('Failed to save meals: ' + error.message);
+            setSaveStatus('Failed to save');
         }
     };
 
@@ -171,37 +250,6 @@ const MealPlanner = ({ userId }) => {
         }
     }, [weekDates, userId, isGoogleApiReady]);
 
-    const saveMeals = async () => {
-        if (!userId) {
-            setSaveStatus('Please login to save meals');
-            return;
-        }
-
-        try {
-            setSaveStatus('Saving...');
-            setError(null);
-
-            const { error } = await supabase
-                .from('meal_plans')
-                .upsert({
-                    user_id: userId,
-                    week_offset: currentWeekOffset,
-                    lunch: meals.lunch,
-                    dinner: meals.dinner,
-                    updated_at: new Date().toISOString()
-                });
-
-            if (error) throw error;
-
-            setSaveStatus('Saved successfully!');
-            setTimeout(() => setSaveStatus(''), 3000);
-        } catch (error) {
-            console.error('Error saving meals:', error);
-            setError('Failed to save meals: ' + error.message);
-            setSaveStatus('Failed to save');
-        }
-    };
-
     const previousWeek = () => setCurrentWeekOffset(prev => prev - 1);
     const nextWeek = () => setCurrentWeekOffset(prev => prev + 1);
     const goToCurrentWeek = () => setCurrentWeekOffset(0);
@@ -232,6 +280,42 @@ const MealPlanner = ({ userId }) => {
             return () => clearTimeout(timeoutId);
         }
     }, [meals, userId, currentWeekOffset]);
+
+    // Get all meals for a specific date
+    const getMealsForDate = async (date) => {
+        const dateStr = date.toISOString().split('T')[0];
+        const { data, error } = await supabase
+            .from('meal_plans')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('meal_date', dateStr);
+        return { data, error };
+    };
+
+// Get meal history for a specific type
+    const getMealHistory = async (mealType, limit = 10) => {
+        const { data, error } = await supabase
+            .from('meal_plans')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('meal_type', mealType)
+            .order('meal_date', { ascending: false })
+            .limit(limit);
+        return { data, error };
+    };
+
+// Get most frequent meals
+    const getFrequentMeals = async (mealType) => {
+        const { data, error } = await supabase
+            .from('meal_plans')
+            .select('meal_name, count(*)')
+            .eq('user_id', userId)
+            .eq('meal_type', mealType)
+            .group('meal_name')
+            .order('count', { ascending: false })
+            .limit(5);
+        return { data, error };
+    };
 
     return (
         <div className="w-full bg-white rounded-lg shadow-lg">
