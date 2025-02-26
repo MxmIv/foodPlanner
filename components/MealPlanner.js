@@ -33,14 +33,61 @@ const MealPlanner = ({ userId }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [isGoogleApiReady, setIsGoogleApiReady] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    // Check if Google API is ready
+    useEffect(() => {
+        const checkGoogleApiStatus = () => {
+            // Check if both gapi and google objects are available
+            if (window.gapi && window.gapi.client && window.google) {
+                console.log('Google API is ready');
+                setIsGoogleApiReady(true);
+            } else {
+                // If not available yet, check again in 500ms
+                setTimeout(checkGoogleApiStatus, 500);
+            }
+        };
+
+        checkGoogleApiStatus();
+
+        // Listen for auth completion events
+        const handleGoogleAuth = () => {
+            console.log('Google Auth completed, API should be ready');
+            // Retry checking API status
+            checkGoogleApiStatus();
+        };
+
+        window.addEventListener('googleAuthComplete', handleGoogleAuth);
+
+        return () => {
+            window.removeEventListener('googleAuthComplete', handleGoogleAuth);
+        };
+    }, []);
+
+    useEffect(() => {
+        // Check if user is authenticated based on userId and localStorage
+        const checkAuthStatus = () => {
+            const hasUserId = !!userId;
+            const hasToken = !!localStorage.getItem('googleToken');
+
+            console.log('Checking auth status:', { hasUserId, hasToken });
+
+            // Only consider authenticated if both conditions are true
+            setIsAuthenticated(hasUserId && hasToken);
+        };
+
+        checkAuthStatus();
+
+        // Also listen for storage events (in case localStorage changes in another tab)
+        const handleStorageChange = () => checkAuthStatus();
+        window.addEventListener('storage', handleStorageChange);
+
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, [userId]);
 
     const loadEventsForWeek = async () => {
-        if (!userId || !window.gapi?.client || !window.gapi.client.getToken()) {
-            console.log('Calendar API not ready:', {
-                userId: !!userId,
-                gapiClient: !!window.gapi?.client,
-                hasToken: !!window.gapi?.client?.getToken()
-            });
+        if (!userId || !isAuthenticated) {
+            console.log('No user ID available');
             return;
         }
 
@@ -48,6 +95,14 @@ const MealPlanner = ({ userId }) => {
         setError(null);
 
         try {
+            const token = localStorage.getItem('googleToken');
+            if (!token) {
+                console.log('No Google token available');
+                setError('No Google token available. Please log in again.');
+                setIsLoading(false);
+                return;
+            }
+
             const weekStart = new Date(weekDates[0]);
             weekStart.setHours(0, 0, 0, 0);
 
@@ -56,24 +111,42 @@ const MealPlanner = ({ userId }) => {
 
             console.log('Fetching events for:', {
                 weekStart: weekStart.toISOString(),
-                weekEnd: weekEnd.toISOString()
+                weekEnd: weekEnd.toISOString(),
+                token: token.substring(0, 10) + '...' // Log partial token for debugging
             });
 
-            const token = window.gapi.client.getToken();
-            if (!token) {
-                throw new Error('No valid token available');
+            // Use fetch API with error handling
+            const response = await fetch(
+                `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+                new URLSearchParams({
+                    timeMin: weekStart.toISOString(),
+                    timeMax: weekEnd.toISOString(),
+                    singleEvents: 'true',
+                    orderBy: 'startTime'
+                }),
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            // Handle specific HTTP error codes
+            if (response.status === 401) {
+                // Token expired or invalid
+                localStorage.removeItem('googleToken');
+                throw new Error('Authentication token expired. Please log in again.');
+            } else if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`Calendar API error: ${errorData.error?.message || response.statusText}`);
             }
 
-            const response = await window.gapi.client.calendar.events.list({
-                calendarId: 'primary',
-                timeMin: weekStart.toISOString(),
-                timeMax: weekEnd.toISOString(),
-                singleEvents: true,
-                orderBy: 'startTime'
-            });
+            const data = await response.json();
+            console.log('Events retrieved:', data.items.length);
 
             const weekEvents = weekDates.map(date => {
-                const dayEvents = response.result.items.filter(event => {
+                const dayEvents = data.items.filter(event => {
                     const eventStart = new Date(event.start.dateTime || event.start.date);
                     return (
                         eventStart.getDate() === date.getDate() &&
@@ -93,7 +166,7 @@ const MealPlanner = ({ userId }) => {
             setEvents(weekEvents);
         } catch (error) {
             console.error('Error loading calendar events:', error);
-            setError('Failed to load calendar events. Please ensure you are logged in.');
+            setError(`Failed to load calendar events: ${error.message}`);
             setEvents(Array(7).fill(null));
         } finally {
             setIsLoading(false);
@@ -101,7 +174,7 @@ const MealPlanner = ({ userId }) => {
     };
 
     const loadMealsForWeek = async () => {
-        if (!userId) return;
+        if (!userId || !isAuthenticated) return;
 
         try {
             setIsLoading(true);
@@ -151,12 +224,14 @@ const MealPlanner = ({ userId }) => {
     };
 
     const saveMeals = async () => {
-        if (!userId) {
+        if (!userId || !isAuthenticated) {
+            console.error('Cannot save meals: No user ID available');
             setSaveStatus('Please login to save meals');
             return;
         }
 
         try {
+            console.log('Starting to save meals for user:', userId);
             setSaveStatus('Saving...');
             setError(null);
 
@@ -165,6 +240,10 @@ const MealPlanner = ({ userId }) => {
 
             weekDates.forEach((date, index) => {
                 const dateStr = date.toISOString().split('T')[0];
+                console.log(`Processing meals for ${dateStr}:`, {
+                    lunch: meals.lunch[index],
+                    dinner: meals.dinner[index]
+                });
 
                 // Add lunch record if there's a meal
                 if (meals.lunch[index]) {
@@ -189,29 +268,46 @@ const MealPlanner = ({ userId }) => {
                 }
             });
 
+            console.log('Prepared meal records:', mealRecords.length);
+
             // Delete existing records for this week
             const weekStart = weekDates[0].toISOString().split('T')[0];
             const weekEnd = weekDates[6].toISOString().split('T')[0];
 
-            const { error: deleteError } = await supabase
+            console.log('Deleting existing records for date range:', weekStart, 'to', weekEnd);
+            const { data: deleteData, error: deleteError } = await supabase
                 .from('meal_plans')
                 .delete()
                 .eq('user_id', userId)
                 .gte('meal_date', weekStart)
                 .lte('meal_date', weekEnd);
 
-            if (deleteError) throw deleteError;
+            if (deleteError) {
+                console.error('Error deleting existing meals:', deleteError);
+                throw deleteError;
+            }
+
+            console.log('Successfully deleted existing records');
 
             // Insert new records
             if (mealRecords.length > 0) {
-                const { error: insertError } = await supabase
+                console.log('Inserting new meal records:', mealRecords);
+                const { data: insertData, error: insertError } = await supabase
                     .from('meal_plans')
                     .insert(mealRecords);
 
-                if (insertError) throw insertError;
+                if (insertError) {
+                    console.error('Error inserting new meals:', insertError);
+                    throw insertError;
+                }
+
+                console.log('Successfully inserted new records:', insertData);
+            } else {
+                console.log('No meal records to insert');
             }
 
             setSaveStatus('Saved successfully!');
+            console.log('Save operation completed successfully');
             setTimeout(() => setSaveStatus(''), 3000);
         } catch (error) {
             console.error('Error saving meals:', error);
@@ -224,29 +320,18 @@ const MealPlanner = ({ userId }) => {
         setWeekDates(getWeekDates(currentWeekOffset));
     }, [currentWeekOffset]);
 
-    // Check Google API initialization
+    // Modified useEffect to properly trigger API calls when needed
     useEffect(() => {
-        const checkGoogleApiReady = () => {
-            const isReady = !!(window.gapi?.client && window.gapi.client.getToken());
-            setIsGoogleApiReady(isReady);
-            return isReady;
-        };
-
-        if (!checkGoogleApiReady()) {
-            const intervalId = setInterval(() => {
-                if (checkGoogleApiReady()) {
-                    clearInterval(intervalId);
-                }
-            }, 100);
-
-            return () => clearInterval(intervalId);
-        }
-    }, [userId]);
-
-    useEffect(() => {
-        if (userId && isGoogleApiReady) {
+        if (userId && weekDates.length > 0) {
             loadMealsForWeek();
-            loadEventsForWeek();
+
+            // Only try to load events if the Google API is ready
+            if (isGoogleApiReady) {
+                console.log('Loading calendar events - API is ready');
+                loadEventsForWeek();
+            } else {
+                console.log('Google API not ready yet, skipping calendar load');
+            }
         }
     }, [weekDates, userId, isGoogleApiReady]);
 
@@ -292,7 +377,7 @@ const MealPlanner = ({ userId }) => {
         return { data, error };
     };
 
-// Get meal history for a specific type
+    // Get meal history for a specific type
     const getMealHistory = async (mealType, limit = 10) => {
         const { data, error } = await supabase
             .from('meal_plans')
@@ -304,7 +389,7 @@ const MealPlanner = ({ userId }) => {
         return { data, error };
     };
 
-// Get most frequent meals
+    // Get most frequent meals
     const getFrequentMeals = async (mealType) => {
         const { data, error } = await supabase
             .from('meal_plans')
@@ -325,6 +410,12 @@ const MealPlanner = ({ userId }) => {
                     <Calendar className="h-6 w-6" />
                     <h2 className="text-2xl font-bold">Weekly Meal Planner</h2>
                 </div>
+
+                {!isAuthenticated && (
+                    <div className="bg-amber-50 text-amber-700 p-4 rounded-md mb-4">
+                        You are not logged in. Please log in to save your meal plans.
+                    </div>
+                )}
 
                 {/* Error Display */}
                 {error && (
@@ -374,6 +465,13 @@ const MealPlanner = ({ userId }) => {
                         Save Meals
                     </button>
                 </div>
+
+                {/* Google API Status */}
+                {!isGoogleApiReady && (
+                    <div className="mb-4 text-amber-600 text-sm">
+                        Waiting for Google Calendar API to initialize...
+                    </div>
+                )}
 
                 {/* Calendar Table */}
                 <div className="overflow-x-auto">
@@ -450,6 +548,7 @@ const MealPlanner = ({ userId }) => {
                             {JSON.stringify({
                                 userId,
                                 currentWeekOffset,
+                                isGoogleApiReady,
                                 meals
                             }, null, 2)}
                         </pre>

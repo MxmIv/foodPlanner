@@ -1,4 +1,5 @@
-// pages/index.js
+// Update your index.js to correctly propagate authentication status
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,19 +21,74 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        // Check active sessions and sets the user
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
+        // Check for existing Google auth on load
+        const checkExistingAuth = () => {
+            const userId = localStorage.getItem('userId');
+            const token = localStorage.getItem('googleToken');
+
+            if (userId && token) {
+                console.log('Found existing auth in localStorage');
+                setSession({
+                    user: {
+                        id: userId,
+                        email: localStorage.getItem('userEmail') || 'user@example.com'
+                    }
+                });
+            }
+        };
+
+        // First check localStorage for existing auth
+        checkExistingAuth();
+
+        // Then check Supabase sessions
+        supabase.auth.getSession().then(({ data: { session: supabaseSession } }) => {
+            // Only set from Supabase if we don't already have a session from localStorage
+            if (!session && supabaseSession) {
+                setSession(supabaseSession);
+            }
             setIsLoading(false);
         });
 
         // Listen for changes on auth state (logged in, signed out, etc.)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, supabaseSession) => {
+            setSession(prev => supabaseSession || prev);
         });
 
-        return () => subscription.unsubscribe();
+        // Listen for storage events (in case localStorage changes in another tab)
+        const handleStorageChange = (e) => {
+            if (e.key === 'userId' || e.key === 'googleToken') {
+                if (e.key === 'userId' && !e.newValue) {
+                    // User logged out - clear session
+                    setSession(null);
+                } else {
+                    // Re-check auth
+                    checkExistingAuth();
+                }
+            }
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+
+        return () => {
+            subscription.unsubscribe();
+            window.removeEventListener('storage', handleStorageChange);
+        };
     }, []);
+
+    const handleAuthChange = ({ isAuthenticated, userId, email }) => {
+        if (isAuthenticated && userId) {
+            // Store auth info in session state
+            setSession({
+                user: {
+                    id: userId,
+                    email: email
+                }
+            });
+        } else {
+            // Handle logout
+            setSession(null);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -53,26 +109,24 @@ export default function Home() {
 
             <main className="flex-1 container mx-auto px-4 py-6">
                 <div className="mb-4 flex justify-end">
-                    <Auth onAuthChange={({ session }) => setSession(session)} />
+                    <Auth onAuthChange={handleAuthChange}/>
                 </div>
 
-                {session ? (
-                    <div className="grid grid-cols-1 gap-6">
-                        <div className="h-full">
-                            <MealPlanner userId={session.user.id} />
-                        </div>
-                        <div className="h-full max-h-[600px] overflow-y-auto">
-                            <MealHistory userId={session.user.id} />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="text-center text-gray-500 py-8">
-                        Please sign in to access your meal planner
-                    </div>
-                )}
+                <div>
+                    {/* Pass the callback to Auth */}
+                    <Auth onAuthChange={handleAuthChange}/>
+
+                    {/* Pass userId to MealPlanner when available */}
+                    {session ? (
+                        <MealPlanner userId={session.user.id}/>
+                    ) : (
+                        <p> Please sign in into your account now!!!!</p>
+
+                    )}
+                </div>
             </main>
 
-            <Footer />
+            <Footer/>
         </div>
     );
 }
