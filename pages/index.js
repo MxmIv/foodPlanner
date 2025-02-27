@@ -108,9 +108,6 @@ export default function Home() {
             <Header title="Meal Planner" />
 
             <main className="flex-1 container mx-auto px-4 py-6">
-                <div className="mb-4 flex justify-end">
-                    <Auth onAuthChange={handleAuthChange}/>
-                </div>
 
                 <div>
                     {/* Pass the callback to Auth */}
