@@ -1,4 +1,4 @@
-// contexts/MealContext.js
+// contexts/MealContext.js - Update to fix week data transfer bug
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { mealService } from '../services/mealService';
@@ -73,10 +73,23 @@ export const MealProvider = ({ children }) => {
         };
     }, [isAuthenticated]);
 
-    // Update week dates when offset changes
+    // Update week dates when offset changes and reset meals
     useEffect(() => {
-        setWeekDates(getWeekDates(currentWeekOffset));
-        setLastFetchedWeek(null); // Reset to force new data fetch
+        // First update weekDates
+        const newWeekDates = getWeekDates(currentWeekOffset);
+        setWeekDates(newWeekDates);
+
+        // Reset meals to empty to prevent transferring data between weeks
+        setMeals({
+            lunch: Array(7).fill(''),
+            dinner: Array(7).fill('')
+        });
+
+        // Reset lastFetchedWeek to force new data fetch
+        setLastFetchedWeek(null);
+
+        // Reset events when changing weeks
+        setEvents(Array(7).fill(null));
     }, [currentWeekOffset]);
 
     // Load meals for the current week
@@ -99,15 +112,22 @@ export const MealProvider = ({ children }) => {
         }
     }, [weekDates, userId, isAuthenticated, isGoogleApiReady]);
 
-    // Auto-save meals when they change
+    // Auto-save meals when they change with debouncing
     useEffect(() => {
-        if (userId && isAuthenticated) {
+        // Skip saving empty meals or when loading
+        if (!userId || !isAuthenticated || isLoading) return;
+
+        // Only save if there's actual meal data
+        const hasMealData = meals.lunch.some(lunch => lunch !== '') ||
+            meals.dinner.some(dinner => dinner !== '');
+
+        if (hasMealData) {
             const timeoutId = setTimeout(() => {
                 saveMeals();
             }, 1000);
             return () => clearTimeout(timeoutId);
         }
-    }, [meals, userId, isAuthenticated]);
+    }, [meals, userId, isAuthenticated, isLoading]);
 
     // Load meals for the current week
     const loadMealsForWeek = async () => {
@@ -135,12 +155,13 @@ export const MealProvider = ({ children }) => {
 
             if (result.error) throw result.error;
 
-            if (result.data && result.data.length > 0) {
-                const freshMeals = {
-                    lunch: Array(7).fill(''),
-                    dinner: Array(7).fill('')
-                };
+            // Always create fresh meals array to avoid carrying over old data
+            const freshMeals = {
+                lunch: Array(7).fill(''),
+                dinner: Array(7).fill('')
+            };
 
+            if (result.data && result.data.length > 0) {
                 // Populate meals from database results
                 result.data.forEach(meal => {
                     const mealDate = new Date(meal.meal_date);
@@ -154,10 +175,10 @@ export const MealProvider = ({ children }) => {
                         freshMeals[meal.meal_type][dayIndex] = meal.meal_name || '';
                     }
                 });
-
-                setMeals(freshMeals);
             }
 
+            // Set the meals with the fresh data
+            setMeals(freshMeals);
             setLastFetchedWeek(weekKey);
         } catch (err) {
             console.error('Error loading meals:', err);
