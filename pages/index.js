@@ -25,29 +25,37 @@ export default function Home() {
         const checkExistingAuth = () => {
             const userId = localStorage.getItem('userId');
             const token = localStorage.getItem('googleToken');
+            const userEmail = localStorage.getItem('userEmail');
 
             if (userId && token) {
                 console.log('Found existing auth in localStorage');
                 setSession({
                     user: {
                         id: userId,
-                        email: localStorage.getItem('userEmail') || 'user@example.com'
+                        email: userEmail || 'user@example.com'
                     }
                 });
+                return true;
             }
+            return false;
         };
 
-        // First check localStorage for existing auth
-        checkExistingAuth();
+        setIsLoading(true);
 
-        // Then check Supabase sessions
-        supabase.auth.getSession().then(({ data: { session: supabaseSession } }) => {
-            // Only set from Supabase if we don't already have a session from localStorage
-            if (!session && supabaseSession) {
-                setSession(supabaseSession);
-            }
+        // First check localStorage for existing auth
+        const hasLocalAuth = checkExistingAuth();
+
+        // Then check Supabase sessions only if no local auth found
+        if (!hasLocalAuth) {
+            supabase.auth.getSession().then(({ data: { session: supabaseSession } }) => {
+                if (supabaseSession) {
+                    setSession(supabaseSession);
+                }
+                setIsLoading(false);
+            });
+        } else {
             setIsLoading(false);
-        });
+        }
 
         // Listen for changes on auth state (logged in, signed out, etc.)
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, supabaseSession) => {
@@ -99,7 +107,7 @@ export default function Home() {
     }
 
     return (
-        <div className="bg-gray-50 flex flex-col">
+        <div className="bg-gray-50 flex flex-col min-h-screen">
             <Head>
                 <title>Meal Planner</title>
                 <link rel="icon" href="/favicon.ico" />
@@ -108,17 +116,19 @@ export default function Home() {
             <Header title="Meal Planner" />
 
             <main className="flex-1 container mx-auto px-4 py-6">
-
                 <div>
-                    {/* Pass the callback to Auth */}
-                    <Auth onAuthChange={handleAuthChange}/>
+                    {/* Auth component - only render once */}
+                    <div className="mb-4 flex justify-end">
+                        <Auth onAuthChange={handleAuthChange}/>
+                    </div>
 
                     {/* Pass userId to MealPlanner when available */}
                     {session ? (
                         <MealPlanner userId={session.user.id}/>
                     ) : (
-                        <p> Please sign in into your account now!!!!</p>
-
+                        <p className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-center">
+                            Please sign in to access your meal planner
+                        </p>
                     )}
                 </div>
             </main>

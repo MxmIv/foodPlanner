@@ -49,11 +49,24 @@ const Auth = ({ onAuthChange }) => {
         };
 
         initializeAuth();
+
+        // Cleanup function to remove any added scripts when component unmounts
+        return () => {
+            const scripts = document.querySelectorAll('script[src="https://accounts.google.com/gsi/client"]');
+            scripts.forEach(script => script.remove());
+        };
     }, []);
 
     const initializeGoogleClient = async () => {
         try {
             // Initialize Google client
+            if (!window.google || !window.google.accounts) {
+                console.error('Google identity services not available');
+                setAuthError('Google authentication services not available. Please try again later.');
+                setIsInitialized(true);
+                return;
+            }
+
             const client = window.google.accounts.oauth2.initTokenClient({
                 client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
                 scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
@@ -71,7 +84,9 @@ const Auth = ({ onAuthChange }) => {
             if (savedToken) {
                 const isValid = await validateToken(savedToken);
                 if (isValid) {
-                    window.gapi.client.setToken({ access_token: savedToken });
+                    if (window.gapi && window.gapi.client) {
+                        window.gapi.client.setToken({ access_token: savedToken });
+                    }
                 } else {
                     // Clear invalid token
                     localStorage.removeItem('googleToken');
@@ -84,6 +99,7 @@ const Auth = ({ onAuthChange }) => {
             }
         } catch (error) {
             console.error('Error initializing Google client:', error);
+            setAuthError('Failed to initialize Google client: ' + error.message);
             setIsInitialized(true);
         }
     };
@@ -91,6 +107,14 @@ const Auth = ({ onAuthChange }) => {
     const loadGapiClient = async () => {
         return new Promise((resolve, reject) => {
             console.log('Loading GAPI client...');
+
+            // Check if GAPI is already loaded
+            if (window.gapi && window.gapi.client) {
+                console.log('GAPI already loaded');
+                resolve();
+                return;
+            }
+
             const script = document.createElement('script');
             script.src = 'https://apis.google.com/js/api.js';
             script.onload = async () => {
@@ -231,10 +255,17 @@ const Auth = ({ onAuthChange }) => {
             // Revoke the token
             const token = localStorage.getItem('googleToken');
             if (token) {
-                await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, {
-                    method: 'POST'
-                });
-                window.gapi.client.setToken(null);
+                try {
+                    await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, {
+                        method: 'POST'
+                    });
+                } catch (revokeError) {
+                    console.error('Error revoking token (continuing logout):', revokeError);
+                }
+
+                if (window.gapi && window.gapi.client) {
+                    window.gapi.client.setToken(null);
+                }
             }
 
             // Clear all stored data
@@ -257,6 +288,7 @@ const Auth = ({ onAuthChange }) => {
             window.location.reload();
         } catch (error) {
             console.error('Logout failed:', error);
+            setAuthError('Logout failed: ' + error.message);
         }
     };
 
