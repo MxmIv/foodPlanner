@@ -2,9 +2,9 @@
 /* Don't use @import for Tailwind in Next.js */
 
 :root {
-  --primary-color: #1e5631; /* Dark green */
-  --primary-light: #3b7d4e;
-  --primary-dark: #143d21;
+  --primary-color: #2c7a43; /* Adjusted dark green (lighter) */
+  --primary-light: #4c9a63;
+  --primary-dark: #1b5e31;
   --accent-color: #f9a826; /* Gold/amber accent */
   --neutral-light: #f8f9fa;
   --neutral-medium: #e9ecef;
@@ -67,12 +67,13 @@ a {
   border: 1px solid #e2e8f0;
   transition: all 0.2s;
   min-height: 40px;
+  background-color: white;
 }
 
 .meal-input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(30, 86, 49, 0.15);
+  box-shadow: 0 0 0 3px rgba(44, 122, 67, 0.15);
 }
 
 .btn {
@@ -126,10 +127,19 @@ a {
 .card-header {
   padding: 1rem;
   border-bottom: 1px solid #e2e8f0;
+  background-color: #f8f9fa; /* Light gray header instead of green */
+}
+
+.card-header-primary {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .card-body {
   padding: 1.5rem;
+  background-color: white;
 }
 
 .notification {
@@ -167,11 +177,13 @@ a {
   color: var(--neutral-dark);
   border-bottom: 2px solid var(--neutral-medium);
   text-align: left;
+  background-color: #f8f9fa; /* Light background for headers */
 }
 
 .calendar-table td {
   padding: 0.75rem;
   border-bottom: 1px solid var(--neutral-medium);
+  background-color: white; /* Ensure white background for cells */
 }
 
 .calendar-day-header {
@@ -188,6 +200,100 @@ a {
 .calendar-day-date {
   font-size: 0.875rem;
   color: var(--neutral-dark);
+}
+
+/* Header styles */
+.app-header {
+  background-color: white;
+  border-bottom: 1px solid #e2e8f0;
+  color: var(--neutral-dark);
+}
+
+.app-header-title {
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.app-header-nav-item {
+  color: var(--neutral-dark);
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  transition: background-color 0.2s;
+}
+
+.app-header-nav-item:hover {
+  background-color: var(--neutral-light);
+}
+
+.app-header-nav-item.active {
+  background-color: var(--primary-light);
+  color: white;
+}
+
+/* Footer styles */
+.app-footer {
+  background-color: white;
+  border-top: 1px solid #e2e8f0;
+  color: var(--neutral-dark);
+}
+
+/* Meal history styles */
+.meal-history-item {
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.5rem;
+  transition: background-color 0.2s;
+  border: 1px solid #e2e8f0;
+  background-color: white;
+}
+
+.meal-history-item:hover {
+  background-color: var(--neutral-light);
+}
+
+.meal-type-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.meal-type-lunch {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.meal-type-dinner {
+  background-color: #e0e7ff;
+  color: #4338ca;
+}
+
+/* Frequent meals styles */
+.frequent-meal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.5rem;
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+
+.frequent-meal-item:hover {
+  background-color: var(--neutral-light);
+  border-color: var(--primary-light);
+}
+
+.frequent-meal-count {
+  background-color: var(--primary-light);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 /* Smooth animations */
@@ -245,7 +351,7 @@ a {
 }
 
 .justify-between {
-  justify-between: space-between;
+  justify-content: space-between;
 }
 
 .gap-2 {

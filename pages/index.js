@@ -1,18 +1,23 @@
 // pages/index.js
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
 import Head from 'next/head';
 import MealPlanner from '@components/MealPlanner';
 import MealHistory from "@components/MealHistory";
 import MealSuggestions from "@components/MealSuggestions";
-import Auth from '@components/Auth';
 import Footer from "@components/Footer";
 import Header from "@components/Header";
+import { Calendar } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Home() {
     const { isLoading, isAuthenticated } = useAuth();
+
+    // Add debug logging for tracking authentication state
+    useEffect(() => {
+        console.log('Authentication state:', { isAuthenticated, isLoading });
+    }, [isAuthenticated, isLoading]);
 
     if (isLoading) {
         return (
@@ -37,11 +42,6 @@ export default function Home() {
             <Header title="Meal Planner" />
 
             <main className="flex-1 container mx-auto px-4 py-6">
-                {/* Authentication Section */}
-                <div className="mb-6 flex justify-end">
-                    <Auth />
-                </div>
-
                 {isAuthenticated ? (
                     <div className="space-y-8">
                         {/* Meal Planner Section */}
@@ -63,10 +63,10 @@ export default function Home() {
                             </p>
                         </div>
 
-                        <div className="bg-primary bg-opacity-10 rounded-lg p-6 text-left">
+                        <div className="bg-primary-light bg-opacity-10 rounded-lg p-6 text-left">
                             <h3 className="font-semibold text-primary mb-2">To get started:</h3>
                             <ul className="list-disc list-inside space-y-2 text-gray-700">
-                                <li>Sign in with your Google account using the button at the top right</li>
+                                <li>Sign in with your Google account using the button in the header</li>
                                 <li>View and edit your weekly meal plan</li>
                                 <li>Your meals will automatically sync with your Google Calendar</li>
                                 <li>View your meal history and frequently used meals</li>

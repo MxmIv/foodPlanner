@@ -54,7 +54,31 @@ export const googleCalendarService = {
                 };
             }
 
-            // Make the API request
+            console.log('Fetching events from', startDateTime, 'to', endDateTime);
+
+            // Try using GAPI client first for better error handling
+            if (window.gapi && window.gapi.client && window.gapi.client.calendar) {
+                try {
+                    const response = await window.gapi.client.calendar.events.list({
+                        'calendarId': 'primary',
+                        'timeMin': startDateTime,
+                        'timeMax': endDateTime,
+                        'singleEvents': true,
+                        'orderBy': 'startTime'
+                    });
+
+                    console.log('Events retrieved via GAPI:', response.result.items?.length || 0);
+                    return {
+                        items: response.result.items || [],
+                        error: null
+                    };
+                } catch (gapiError) {
+                    console.error('GAPI calendar error:', gapiError);
+                    // Fall back to fetch API
+                }
+            }
+
+            // Fallback to fetch API
             const response = await fetch(
                 `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
                 new URLSearchParams({
@@ -91,7 +115,7 @@ export const googleCalendarService = {
 
             // Parse and return the data
             const data = await response.json();
-            console.log('Events retrieved:', data.items?.length || 0);
+            console.log('Events retrieved via fetch API:', data.items?.length || 0);
 
             return {
                 items: data.items || [],

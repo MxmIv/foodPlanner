@@ -72,7 +72,7 @@ const MealPlanner = () => {
     return (
         <div className="card mb-8" id="meal-planner">
             {/* Header */}
-            <div className="bg-primary text-white p-4 flex items-center gap-3">
+            <div className="card-header-primary flex items-center gap-3">
                 <Calendar className="h-6 w-6" />
                 <h2 className="text-xl font-bold">Weekly Meal Planner</h2>
             </div>
@@ -153,7 +153,7 @@ const MealPlanner = () => {
                             {weekDates.map((date, index) => (
                                 <th
                                     key={index}
-                                    className={`min-w-[120px] ${isToday(date) && isCurrentWeek ? 'bg-primary bg-opacity-10' : ''}`}
+                                    className={`min-w-[120px] ${isToday(date) && isCurrentWeek ? 'bg-primary-light bg-opacity-10' : ''}`}
                                 >
                                     <div className="calendar-day-header">
                                         <span className="calendar-day-name">{getDayName(date)}</span>
@@ -174,7 +174,7 @@ const MealPlanner = () => {
                             {weekDates.map((date, index) => (
                                 <td
                                     key={index}
-                                    className={`text-sm ${isToday(date) && isCurrentWeek ? 'bg-primary bg-opacity-5' : ''}`}
+                                    className={`text-sm ${isToday(date) && isCurrentWeek ? 'bg-primary-light bg-opacity-5' : ''}`}
                                 >
                                     {isLoading ? (
                                         <div className="flex justify-center">
@@ -200,7 +200,7 @@ const MealPlanner = () => {
                             {weekDates.map((date, index) => (
                                 <td
                                     key={index}
-                                    className={isToday(date) && isCurrentWeek ? 'bg-primary bg-opacity-5' : ''}
+                                    className={isToday(date) && isCurrentWeek ? 'bg-primary-light bg-opacity-5' : ''}
                                 >
                                     <input
                                         type="text"
@@ -222,7 +222,7 @@ const MealPlanner = () => {
                             {weekDates.map((date, index) => (
                                 <td
                                     key={index}
-                                    className={isToday(date) && isCurrentWeek ? 'bg-primary bg-opacity-5' : ''}
+                                    className={isToday(date) && isCurrentWeek ? 'bg-primary-light bg-opacity-5' : ''}
                                 >
                                     <input
                                         type="text"

@@ -2,14 +2,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Plus, Coffee, Moon } from 'lucide-react';
+import { BookOpen, Coffee, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { mealService } from '../services/mealService';
-import { useMeals } from '../contexts/MealContext';
 
 const MealSuggestions = () => {
     const { userId, isAuthenticated } = useAuth();
-    const { updateMeal } = useMeals();
     const [frequentMeals, setFrequentMeals] = useState({
         lunch: [],
         dinner: []
@@ -48,26 +46,21 @@ const MealSuggestions = () => {
         }
     };
 
-    // Handle adding a meal to the current planner
-    const handleAddMeal = (mealType, mealName, dayIndex) => {
-        updateMeal(mealType, dayIndex, mealName);
-    };
-
     // Prevent rendering if not authenticated
     if (!userId || !isAuthenticated) return null;
 
     return (
         <div className="card mb-8" id="meal-suggestions">
-            <div className="bg-primary text-white p-4 flex items-center gap-3">
+            <div className="card-header-primary flex items-center gap-3">
                 <BookOpen className="h-6 w-6" />
-                <h3 className="text-xl font-bold">Quick Add Frequent Meals</h3>
+                <h3 className="text-xl font-bold">Frequent Meals</h3>
             </div>
 
             <div className="card-body">
                 {isLoading ? (
                     <div className="text-center text-gray-500 py-4">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
-                        <p className="mt-2">Loading suggestions...</p>
+                        <p className="mt-2">Loading frequent meals...</p>
                     </div>
                 ) : error ? (
                     <div className="bg-red-50 text-red-600 p-3 rounded-md">
@@ -85,27 +78,14 @@ const MealSuggestions = () => {
                             {frequentMeals.lunch.length === 0 ? (
                                 <p className="text-center text-neutral-dark py-4">No frequent lunches found</p>
                             ) : (
-                                <div className="grid gap-2">
+                                <div className="space-y-2">
                                     {frequentMeals.lunch.map((item, index) => (
                                         <div
                                             key={index}
-                                            className="flex items-center justify-between p-3 bg-neutral-light rounded-lg hover:bg-neutral-medium transition-colors"
+                                            className="frequent-meal-item"
                                         >
                                             <span className="font-medium">{item.meal_name}</span>
-                                            <div className="flex items-center text-sm">
-                                                <span className="text-neutral-dark mr-2">({item.count} times)</span>
-                                                <button
-                                                    onClick={() => {
-                                                        const today = new Date().getDay() - 1; // 0-6 (Sun-Sat) to 0-6 (Mon-Sun)
-                                                        const dayIndex = today < 0 ? 6 : today; // Handle Sunday
-                                                        handleAddMeal('lunch', item.meal_name, dayIndex);
-                                                    }}
-                                                    className="btn-primary p-1 rounded-full"
-                                                    title="Add to today's lunch"
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </button>
-                                            </div>
+                                            <span className="frequent-meal-count">{item.count}x</span>
                                         </div>
                                     ))}
                                 </div>
@@ -122,27 +102,14 @@ const MealSuggestions = () => {
                             {frequentMeals.dinner.length === 0 ? (
                                 <p className="text-center text-neutral-dark py-4">No frequent dinners found</p>
                             ) : (
-                                <div className="grid gap-2">
+                                <div className="space-y-2">
                                     {frequentMeals.dinner.map((item, index) => (
                                         <div
                                             key={index}
-                                            className="flex items-center justify-between p-3 bg-neutral-light rounded-lg hover:bg-neutral-medium transition-colors"
+                                            className="frequent-meal-item"
                                         >
                                             <span className="font-medium">{item.meal_name}</span>
-                                            <div className="flex items-center text-sm">
-                                                <span className="text-neutral-dark mr-2">({item.count} times)</span>
-                                                <button
-                                                    onClick={() => {
-                                                        const today = new Date().getDay() - 1; // 0-6 (Sun-Sat) to 0-6 (Mon-Sun)
-                                                        const dayIndex = today < 0 ? 6 : today; // Handle Sunday
-                                                        handleAddMeal('dinner', item.meal_name, dayIndex);
-                                                    }}
-                                                    className="btn-primary p-1 rounded-full"
-                                                    title="Add to today's dinner"
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </button>
-                                            </div>
+                                            <span className="frequent-meal-count">{item.count}x</span>
                                         </div>
                                     ))}
                                 </div>

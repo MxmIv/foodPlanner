@@ -92,7 +92,7 @@ const MealHistory = () => {
 
     return (
         <div className="card" id="meal-history">
-            <div className="bg-primary text-white p-4 flex items-center gap-3">
+            <div className="card-header-primary flex items-center gap-3">
                 <History className="h-6 w-6" />
                 <h3 className="text-xl font-bold">Meal History</h3>
             </div>
@@ -126,7 +126,7 @@ const MealHistory = () => {
                             onClick={() => setActiveTab('all')}
                             className={`px-4 py-2 text-sm font-medium border border-gray-300 rounded-l-md ${
                                 activeTab === 'all'
-                                    ? 'bg-primary text-white border-primary'
+                                    ? 'bg-primary-light text-white border-primary-light'
                                     : 'bg-white text-gray-700 hover:bg-gray-50'
                             }`}
                         >
@@ -176,15 +176,15 @@ const MealHistory = () => {
                 ) : (
                     <div className="space-y-6">
                         {Object.entries(mealsByMonth).map(([monthYear, meals]) => (
-                            <div key={monthYear} className="border rounded-lg overflow-hidden">
-                                <div className="bg-gray-100 px-4 py-2 font-medium text-gray-700">
+                            <div key={monthYear} className="border rounded-lg overflow-hidden shadow-sm">
+                                <div className="bg-gray-100 px-4 py-3 font-medium text-gray-700 border-b">
                                     {monthYear}
                                 </div>
                                 <div className="divide-y divide-gray-200">
                                     {meals.map((item, index) => (
                                         <div
                                             key={`${item.date.toISOString()}-${item.type}-${index}`}
-                                            className="flex flex-col sm:flex-row sm:items-center px-4 py-3 hover:bg-gray-50"
+                                            className="meal-history-item flex flex-col sm:flex-row sm:items-center p-4 hover:bg-gray-50 transition-colors"
                                         >
                                             <div className="flex items-center mb-2 sm:mb-0 sm:w-1/3">
                                                 <div className="w-24 text-gray-500 text-sm mr-2">
@@ -195,10 +195,10 @@ const MealHistory = () => {
                                                     })}
                                                 </div>
                                                 <div
-                                                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                    className={`meal-type-badge ${
                                                         item.type === 'lunch'
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : 'bg-indigo-100 text-indigo-800'
+                                                            ? 'meal-type-lunch'
+                                                            : 'meal-type-dinner'
                                                     }`}
                                                 >
                                                     {item.type === 'lunch' ? 'Lunch' : 'Dinner'}
