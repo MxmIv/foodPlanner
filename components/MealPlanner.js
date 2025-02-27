@@ -34,6 +34,7 @@ const MealPlanner = ({ userId }) => {
     const [error, setError] = useState(null);
     const [isGoogleApiReady, setIsGoogleApiReady] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [lastFetchedWeek, setLastFetchedWeek] = useState(null);
 
     // Check if Google API is ready
     useEffect(() => {
@@ -72,8 +73,11 @@ const MealPlanner = ({ userId }) => {
 
             console.log('Checking auth status:', { hasUserId, hasToken });
 
-            // Only consider authenticated if both conditions are true
-            setIsAuthenticated(hasUserId && hasToken);
+            // Only update auth state if it has changed to prevent re-renders
+            const newAuthState = hasUserId && hasToken;
+            if (isAuthenticated !== newAuthState) {
+                setIsAuthenticated(newAuthState);
+            }
         };
 
         checkAuthStatus();
@@ -83,7 +87,7 @@ const MealPlanner = ({ userId }) => {
         window.addEventListener('storage', handleStorageChange);
 
         return () => window.removeEventListener('storage', handleStorageChange);
-    }, [userId]);
+    }, [userId, isAuthenticated]);
 
     const loadEventsForWeek = async () => {
         if (!userId || !isAuthenticated) {
@@ -176,6 +180,13 @@ const MealPlanner = ({ userId }) => {
     const loadMealsForWeek = async () => {
         if (!userId || !isAuthenticated) return;
 
+        // Check if we've already fetched for this week to prevent unnecessary API calls
+        const weekKey = `${weekDates[0].toISOString()}_${weekDates[6].toISOString()}`;
+        if (lastFetchedWeek === weekKey) {
+            console.log('Skipping meal load - already fetched for this week');
+            return;
+        }
+
         try {
             setIsLoading(true);
             setError(null);
@@ -201,23 +212,27 @@ const MealPlanner = ({ userId }) => {
             };
 
             // Populate meals from database results
-            data.forEach(meal => {
-                const mealDate = new Date(meal.meal_date);
-                const dayIndex = weekDates.findIndex(date =>
-                    date.getDate() === mealDate.getDate() &&
-                    date.getMonth() === mealDate.getMonth() &&
-                    date.getFullYear() === mealDate.getFullYear()
-                );
+            if (data && data.length > 0) {
+                data.forEach(meal => {
+                    const mealDate = new Date(meal.meal_date);
+                    const dayIndex = weekDates.findIndex(date =>
+                        date.getDate() === mealDate.getDate() &&
+                        date.getMonth() === mealDate.getMonth() &&
+                        date.getFullYear() === mealDate.getFullYear()
+                    );
 
-                if (dayIndex !== -1) {
-                    freshMeals[meal.meal_type][dayIndex] = meal.meal_name || '';
-                }
-            });
+                    if (dayIndex !== -1) {
+                        freshMeals[meal.meal_type][dayIndex] = meal.meal_name || '';
+                    }
+                });
+            }
 
             setMeals(freshMeals);
+            setLastFetchedWeek(weekKey);
         } catch (error) {
             console.error('Error loading meals:', error);
             setError('Failed to load meals: ' + error.message);
+            // Don't clear existing meals on error
         } finally {
             setIsLoading(false);
         }
@@ -318,22 +333,24 @@ const MealPlanner = ({ userId }) => {
 
     useEffect(() => {
         setWeekDates(getWeekDates(currentWeekOffset));
+        // Reset lastFetchedWeek when changing week
+        setLastFetchedWeek(null);
     }, [currentWeekOffset]);
 
-    // Modified useEffect to properly trigger API calls when needed
+    // Split the meal loading and event loading into separate useEffects
     useEffect(() => {
-        if (userId && weekDates.length > 0) {
+        if (userId && isAuthenticated && weekDates.length > 0) {
             loadMealsForWeek();
-
-            // Only try to load events if the Google API is ready
-            if (isGoogleApiReady) {
-                console.log('Loading calendar events - API is ready');
-                loadEventsForWeek();
-            } else {
-                console.log('Google API not ready yet, skipping calendar load');
-            }
         }
-    }, [weekDates, userId, isGoogleApiReady]);
+    }, [weekDates, userId, isAuthenticated]);
+
+    // Separate useEffect for Google Calendar events to avoid unnecessary meal reloads
+    useEffect(() => {
+        if (userId && isAuthenticated && weekDates.length > 0 && isGoogleApiReady) {
+            console.log('Loading calendar events - API is ready');
+            loadEventsForWeek();
+        }
+    }, [weekDates, userId, isAuthenticated, isGoogleApiReady]);
 
     const previousWeek = () => setCurrentWeekOffset(prev => prev - 1);
     const nextWeek = () => setCurrentWeekOffset(prev => prev + 1);
@@ -356,51 +373,15 @@ const MealPlanner = ({ userId }) => {
         }));
     };
 
-    // Auto-save effect
+    // Debounced auto-save with proper cleanup
     useEffect(() => {
-        if (userId) {
+        if (userId && isAuthenticated) {
             const timeoutId = setTimeout(() => {
                 saveMeals();
             }, 1000);
             return () => clearTimeout(timeoutId);
         }
-    }, [meals, userId, currentWeekOffset]);
-
-    // Get all meals for a specific date
-    const getMealsForDate = async (date) => {
-        const dateStr = date.toISOString().split('T')[0];
-        const { data, error } = await supabase
-            .from('meal_plans')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('meal_date', dateStr);
-        return { data, error };
-    };
-
-    // Get meal history for a specific type
-    const getMealHistory = async (mealType, limit = 10) => {
-        const { data, error } = await supabase
-            .from('meal_plans')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('meal_type', mealType)
-            .order('meal_date', { ascending: false })
-            .limit(limit);
-        return { data, error };
-    };
-
-    // Get most frequent meals
-    const getFrequentMeals = async (mealType) => {
-        const { data, error } = await supabase
-            .from('meal_plans')
-            .select('meal_name, count(*)')
-            .eq('user_id', userId)
-            .eq('meal_type', mealType)
-            .group('meal_name')
-            .order('count', { ascending: false })
-            .limit(5);
-        return { data, error };
-    };
+    }, [meals, userId, isAuthenticated]);
 
     return (
         <div className="w-full bg-white rounded-lg shadow-lg">
@@ -460,6 +441,7 @@ const MealPlanner = ({ userId }) => {
                     <button
                         onClick={saveMeals}
                         className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                        disabled={!isAuthenticated}
                     >
                         <Save className="h-4 w-4" />
                         Save Meals
@@ -467,7 +449,7 @@ const MealPlanner = ({ userId }) => {
                 </div>
 
                 {/* Google API Status */}
-                {!isGoogleApiReady && (
+                {!isGoogleApiReady && isAuthenticated && (
                     <div className="mb-4 text-amber-600 text-sm">
                         Waiting for Google Calendar API to initialize...
                     </div>
@@ -540,20 +522,6 @@ const MealPlanner = ({ userId }) => {
                         </tbody>
                     </table>
                 </div>
-
-                {/* Debug Info (only in development) */}
-                {process.env.NODE_ENV === 'development' && (
-                    <div className="mt-4 p-4 bg-gray-50 rounded text-xs">
-                        <pre>
-                            {JSON.stringify({
-                                userId,
-                                currentWeekOffset,
-                                isGoogleApiReady,
-                                meals
-                            }, null, 2)}
-                        </pre>
-                    </div>
-                )}
             </div>
         </div>
     );
