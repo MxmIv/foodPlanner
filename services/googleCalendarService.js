@@ -4,11 +4,13 @@ import { googleAuthService } from './googleAuthService';
 export const googleCalendarService = {
     // Check if Google API is ready
     isApiReady: async () => {
-        // Check if both gapi and google objects are available
-        if (window.gapi && window.gapi.client && window.google) {
-            return true;
+        try {
+            // Check if both gapi and google objects are available
+            return !!(window.gapi && window.gapi.client && window.google);
+        } catch (error) {
+            console.error('Error checking if Google API is ready:', error);
+            return false;
         }
-        return false;
     },
 
     // Initialize API
@@ -33,6 +35,7 @@ export const googleCalendarService = {
             // Check for authentication
             const token = googleAuthService.getToken();
             if (!token) {
+                console.log('No Google token found for calendar events');
                 return {
                     items: [],
                     error: 'No authentication token available. Please log in.'
@@ -42,6 +45,7 @@ export const googleCalendarService = {
             // Validate the token
             const isValid = await googleAuthService.validateToken(token);
             if (!isValid) {
+                console.log('Invalid Google token found for calendar events');
                 // Token is invalid, attempt to reload the page to trigger re-authentication
                 localStorage.removeItem('googleToken');
                 return {

@@ -43,20 +43,35 @@ export const mealService = {
         }
     },
 
-    // Get most frequent meals
+    // Get most frequent meals - modified to use a custom SQL query
     getFrequentMeals: async (userId, mealType, limit = 5) => {
         try {
+            // Alternative approach without using .group()
             const { data, error } = await supabase
                 .from('meal_plans')
-                .select('meal_name, count(*)')
+                .select('meal_name, meal_type')
                 .eq('user_id', userId)
-                .eq('meal_type', mealType)
-                .group('meal_name')
-                .order('count', { ascending: false })
-                .limit(limit);
+                .eq('meal_type', mealType);
 
             if (error) throw error;
-            return { data, error: null };
+
+            // Calculate frequencies manually
+            const mealCounts = data.reduce((acc, meal) => {
+                const mealName = meal.meal_name;
+                if (!acc[mealName]) {
+                    acc[mealName] = 0;
+                }
+                acc[mealName]++;
+                return acc;
+            }, {});
+
+            // Convert to array and sort
+            const frequentMeals = Object.entries(mealCounts).map(([meal_name, count]) => ({
+                meal_name,
+                count
+            })).sort((a, b) => b.count - a.count).slice(0, limit);
+
+            return { data: frequentMeals, error: null };
         } catch (error) {
             console.error('Error getting frequent meals:', error);
             return { data: [], error };

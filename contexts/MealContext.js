@@ -40,17 +40,25 @@ export const MealProvider = ({ children }) => {
     // Check if Google API is ready
     useEffect(() => {
         const checkGoogleApiStatus = async () => {
-            const isReady = await googleCalendarService.isApiReady();
-            if (isReady) {
-                console.log('Google API is ready');
-                setIsGoogleApiReady(true);
-            } else {
-                // If not available yet, check again in 500ms
-                setTimeout(checkGoogleApiStatus, 500);
+            try {
+                const isReady = await googleCalendarService.isApiReady();
+                if (isReady) {
+                    console.log('Google API is ready');
+                    setIsGoogleApiReady(true);
+                } else {
+                    // If not available yet, check again in 500ms
+                    setTimeout(checkGoogleApiStatus, 500);
+                }
+            } catch (err) {
+                console.error('Error checking Google API status:', err);
+                // Don't keep trying if there's an error
+                setIsGoogleApiReady(false);
             }
         };
 
-        checkGoogleApiStatus();
+        if (isAuthenticated) {
+            checkGoogleApiStatus();
+        }
 
         // Listen for auth completion events
         const handleGoogleAuth = () => {
@@ -63,7 +71,7 @@ export const MealProvider = ({ children }) => {
         return () => {
             window.removeEventListener('googleAuthComplete', handleGoogleAuth);
         };
-    }, []);
+    }, [isAuthenticated]);
 
     // Update week dates when offset changes
     useEffect(() => {
@@ -81,7 +89,13 @@ export const MealProvider = ({ children }) => {
     // Load calendar events for the current week
     useEffect(() => {
         if (userId && isAuthenticated && weekDates.length > 0 && isGoogleApiReady) {
-            loadEventsForWeek();
+            loadEventsForWeek().catch(err => {
+                console.error('Failed to load events:', err);
+                // Don't set error state for auth issues to prevent UI disruption
+                if (!err.message?.includes('No authentication token available')) {
+                    setError(`Failed to load events: ${err.message}`);
+                }
+            });
         }
     }, [weekDates, userId, isAuthenticated, isGoogleApiReady]);
 
@@ -155,11 +169,24 @@ export const MealProvider = ({ children }) => {
 
     // Load calendar events for the current week
     const loadEventsForWeek = async () => {
-        if (!userId || !isAuthenticated) return;
+        if (!userId || !isAuthenticated) {
+            return;
+        }
 
         try {
             setIsLoading(true);
+            // Only set error to null when starting a successful load
             setError(null);
+
+            // Validate token availability first
+            const token = localStorage.getItem('googleToken');
+            if (!token) {
+                console.log('No Google token available, skipping calendar load');
+                // Don't set error for missing token to prevent UI disruption
+                setEvents(Array(7).fill(null));
+                setIsLoading(false);
+                return;
+            }
 
             const weekStart = new Date(weekDates[0]);
             weekStart.setHours(0, 0, 0, 0);
@@ -173,7 +200,13 @@ export const MealProvider = ({ children }) => {
             );
 
             if (result.error) {
-                throw new Error(result.error);
+                console.warn('Calendar API error:', result.error);
+                // Don't throw auth errors to prevent UI disruption
+                if (!result.error.includes('No authentication token available')) {
+                    throw new Error(result.error);
+                }
+                setEvents(Array(7).fill(null));
+                return;
             }
 
             const weekEvents = weekDates.map(date => {
@@ -197,8 +230,12 @@ export const MealProvider = ({ children }) => {
             setEvents(weekEvents);
         } catch (err) {
             console.error('Error loading calendar events:', err);
-            setError(`Failed to load calendar events: ${err.message}`);
+            // Only set error state for non-auth errors to prevent UI disruption
+            if (!err.message?.includes('No authentication token available')) {
+                setError(`Failed to load calendar events: ${err.message}`);
+            }
             setEvents(Array(7).fill(null));
+            throw err; // Rethrow for the effect error handler
         } finally {
             setIsLoading(false);
         }

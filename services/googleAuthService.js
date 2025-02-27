@@ -110,22 +110,30 @@ export const googleAuthService = {
 
     // Create a token client
     createTokenClient: (callback) => {
-        if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-            console.error('Google Identity Services not fully loaded');
+        try {
+            if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+                console.error('Google Identity Services not fully loaded');
+                return null;
+            }
+
+            return window.google.accounts.oauth2.initTokenClient({
+                client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+                scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+                callback: callback
+            });
+        } catch (error) {
+            console.error('Error creating token client:', error);
             return null;
         }
-
-        return window.google.accounts.oauth2.initTokenClient({
-            client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-            scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-            callback: callback
-        });
     },
 
     // Validate a token
     validateToken: async (token) => {
         try {
-            if (!token) return false;
+            if (!token) {
+                console.log('No token provided for validation');
+                return false;
+            }
 
             const response = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${token}`);
 
@@ -154,7 +162,10 @@ export const googleAuthService = {
     // Get user info
     getUserInfo: async (token) => {
         try {
-            if (!token) throw new Error('No token provided');
+            if (!token) {
+                console.error('No token provided for getUserInfo');
+                throw new Error('No token provided');
+            }
 
             const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { Authorization: `Bearer ${token}` }
@@ -230,21 +241,41 @@ export const googleAuthService = {
 
     // Check if currently authenticated
     isAuthenticated: () => {
-        return !!localStorage.getItem('googleToken') && !!localStorage.getItem('userId');
+        try {
+            return !!localStorage.getItem('googleToken') && !!localStorage.getItem('userId');
+        } catch (error) {
+            console.error('Error checking authentication status:', error);
+            return false;
+        }
     },
 
     // Get the current user ID
     getUserId: () => {
-        return localStorage.getItem('userId');
+        try {
+            return localStorage.getItem('userId');
+        } catch (error) {
+            console.error('Error getting user ID:', error);
+            return null;
+        }
     },
 
     // Get the current user email
     getUserEmail: () => {
-        return localStorage.getItem('userEmail');
+        try {
+            return localStorage.getItem('userEmail');
+        } catch (error) {
+            console.error('Error getting user email:', error);
+            return null;
+        }
     },
 
     // Get the current token
     getToken: () => {
-        return localStorage.getItem('googleToken');
+        try {
+            return localStorage.getItem('googleToken');
+        } catch (error) {
+            console.error('Error getting token:', error);
+            return null;
+        }
     }
 };
