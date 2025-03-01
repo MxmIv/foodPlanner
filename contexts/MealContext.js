@@ -1,8 +1,20 @@
-// contexts/MealContext.js - Update to fix week data transfer bug
+// contexts/MealContext.js
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { mealService } from '../services/mealService';
 import { googleCalendarService } from '../services/googleCalendarService';
+
+// Direct token getter for Google API
+const getDirectToken = () => {
+    try {
+        const token = localStorage.getItem('googleToken');
+        console.log('Direct token check:', token ? `Found (length: ${token.length})` : 'Not found');
+        return token;
+    } catch (e) {
+        console.error('Error accessing localStorage:', e);
+        return null;
+    }
+};
 
 // Create the context
 const MealContext = createContext(null);
@@ -44,6 +56,15 @@ export const MealProvider = ({ children }) => {
                 const isReady = await googleCalendarService.isApiReady();
                 if (isReady) {
                     console.log('Google API is ready');
+
+                    // Explicitly initialize Calendar API
+                    const calendarResult = await googleCalendarService.initializeCalendarAPI();
+                    if (calendarResult && calendarResult.success) {
+                        console.log('Calendar API initialized successfully');
+                    } else if (calendarResult) {
+                        console.warn('Calendar API initialization failed:', calendarResult.error);
+                    }
+
                     setIsGoogleApiReady(true);
                 } else {
                     // If not available yet, check again in 500ms
@@ -144,11 +165,15 @@ export const MealProvider = ({ children }) => {
             setIsLoading(true);
             setError(null);
 
+            // Get consistent userId from context
+            const consistentUserId = userId;
+
             const weekStart = weekDates[0];
             const weekEnd = weekDates[6];
 
+            console.log(`Getting meals for ${consistentUserId} from ${weekStart.toISOString().split('T')[0]} to ${weekEnd.toISOString().split('T')[0]}`);
             const result = await mealService.getMealsForWeek(
-                userId,
+                consistentUserId,
                 weekStart.toISOString().split('T')[0],
                 weekEnd.toISOString().split('T')[0]
             );
@@ -191,16 +216,16 @@ export const MealProvider = ({ children }) => {
     // Load calendar events for the current week
     const loadEventsForWeek = async () => {
         if (!userId || !isAuthenticated) {
+            console.log('Not loading events - not authenticated');
             return;
         }
 
         try {
             setIsLoading(true);
-            // Only set error to null when starting a successful load
             setError(null);
 
-            // Validate token availability first
-            const token = localStorage.getItem('googleToken');
+            // Use direct token access
+            const token = getDirectToken();
             if (!token) {
                 console.log('No Google token available, skipping calendar load');
                 // Don't set error for missing token to prevent UI disruption
@@ -209,16 +234,29 @@ export const MealProvider = ({ children }) => {
                 return;
             }
 
+            // Make sure token is set in GAPI client
+            if (window.gapi && window.gapi.client) {
+                window.gapi.client.setToken({ access_token: token });
+                console.log('Ensured token is set in GAPI client');
+            }
+
             const weekStart = new Date(weekDates[0]);
             weekStart.setHours(0, 0, 0, 0);
 
             const weekEnd = new Date(weekDates[6]);
             weekEnd.setHours(23, 59, 59, 999);
 
+            console.log('Fetching events from', weekStart.toISOString(), 'to', weekEnd.toISOString());
+
             const result = await googleCalendarService.getEventsForRange(
                 weekStart.toISOString(),
                 weekEnd.toISOString()
             );
+
+            console.log('Calendar event result:', {
+                hasError: !!result.error,
+                itemCount: result.items?.length || 0
+            });
 
             if (result.error) {
                 console.warn('Calendar API error:', result.error);
@@ -264,14 +302,17 @@ export const MealProvider = ({ children }) => {
 
     // Save meals to the server
     const saveMeals = async () => {
-        if (!userId || !isAuthenticated) {
+        // Get consistent userId from context
+        const consistentUserId = userId;
+
+        if (!consistentUserId || !isAuthenticated) {
             console.error('Cannot save meals: No user ID available');
             setSaveStatus('Please login to save meals');
             return;
         }
 
         try {
-            console.log('Starting to save meals for user:', userId);
+            console.log('Starting to save meals for user:', consistentUserId);
             setSaveStatus('Saving...');
             setError(null);
 
@@ -284,7 +325,7 @@ export const MealProvider = ({ children }) => {
                 // Add lunch record if there's a meal
                 if (meals.lunch[index]) {
                     mealRecords.push({
-                        user_id: userId,
+                        user_id: consistentUserId, // Use consistent ID
                         meal_date: dateStr,
                         meal_type: 'lunch',
                         meal_name: meals.lunch[index],
@@ -295,7 +336,7 @@ export const MealProvider = ({ children }) => {
                 // Add dinner record if there's a meal
                 if (meals.dinner[index]) {
                     mealRecords.push({
-                        user_id: userId,
+                        user_id: consistentUserId, // Use consistent ID
                         meal_date: dateStr,
                         meal_type: 'dinner',
                         meal_name: meals.dinner[index],
@@ -311,7 +352,7 @@ export const MealProvider = ({ children }) => {
             const weekEnd = weekDates[6].toISOString().split('T')[0];
 
             const result = await mealService.updateMealsForWeek(
-                userId,
+                consistentUserId, // Use consistent ID
                 weekStart,
                 weekEnd,
                 mealRecords

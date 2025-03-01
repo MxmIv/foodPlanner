@@ -220,25 +220,6 @@ export const googleAuthService = {
         }
     },
 
-    // Save auth data to localStorage
-    saveAuthData: (userId, email, token) => {
-        try {
-            localStorage.setItem('userId', userId);
-            localStorage.setItem('userEmail', email);
-            localStorage.setItem('googleToken', token);
-
-            // Set token for GAPI client if available
-            if (window.gapi && window.gapi.client) {
-                window.gapi.client.setToken({ access_token: token });
-            }
-
-            return true;
-        } catch (error) {
-            console.error('Error saving auth data to localStorage:', error);
-            return false;
-        }
-    },
-
     // Check if currently authenticated
     isAuthenticated: () => {
         try {
@@ -269,13 +250,77 @@ export const googleAuthService = {
         }
     },
 
-    // Get the current token
+    // Update the saveAuthData method in googleAuthService.js
+
+// Save auth data to localStorage
+    saveAuthData: (userId, email, token) => {
+        try {
+            console.log('Saving auth data to localStorage:', {
+                hasUserId: !!userId,
+                hasEmail: !!email,
+                hasToken: !!token,
+                tokenLength: token ? token.length : 0
+            });
+
+            // Direct localStorage calls with error checking
+            try {
+                localStorage.setItem('userId', userId);
+                console.log('userId saved:', localStorage.getItem('userId') === userId);
+            } catch (e) {
+                console.error('Error saving userId to localStorage:', e);
+            }
+
+            try {
+                localStorage.setItem('userEmail', email);
+                console.log('userEmail saved:', localStorage.getItem('userEmail') === email);
+            } catch (e) {
+                console.error('Error saving userEmail to localStorage:', e);
+            }
+
+            try {
+                localStorage.setItem('googleToken', token);
+                const storedToken = localStorage.getItem('googleToken');
+                console.log('googleToken saved:', storedToken === token,
+                    storedToken ? `Length: ${storedToken.length}` : 'Token missing after save');
+            } catch (e) {
+                console.error('Error saving googleToken to localStorage:', e);
+            }
+
+            // Set token for GAPI client if available
+            if (window.gapi && window.gapi.client) {
+                try {
+                    window.gapi.client.setToken({ access_token: token });
+                    console.log('Token set in GAPI client');
+                } catch (e) {
+                    console.error('Error setting token in GAPI client:', e);
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error in saveAuthData:', error);
+            return false;
+        }
+    },
+
+// Get the current token with better error handling
     getToken: () => {
         try {
-            return localStorage.getItem('googleToken');
+            const token = localStorage.getItem('googleToken');
+            if (!token) {
+                console.warn('No token found in localStorage');
+                return null;
+            }
+
+            if (token.length < 20) {
+                console.warn('Token found but appears invalid (too short)');
+                return null;
+            }
+
+            return token;
         } catch (error) {
-            console.error('Error getting token:', error);
+            console.error('Error getting token from localStorage:', error);
             return null;
         }
-    }
+    },
 };

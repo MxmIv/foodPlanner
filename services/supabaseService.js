@@ -1,10 +1,27 @@
-// services/supabaseService.js
+// services/supabaseService.js - Make sure it looks like this
 import { createClient } from '@supabase/supabase-js';
 
-// Create Supabase client
+// Create Supabase client - ensure environment variables are available
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Log for debugging - remove in production
+console.log('Supabase initialization:', {
+    hasUrl: !!SUPABASE_URL,
+    hasKey: !!SUPABASE_ANON_KEY,
+    urlLength: SUPABASE_URL?.length,
+    keyLength: SUPABASE_ANON_KEY?.length
+});
+
+// Check if keys are available before creating the client
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('Supabase URL or key is missing. Check your environment variables.');
+}
+
+// Create the client
 const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
 );
 
 export const supabaseService = {

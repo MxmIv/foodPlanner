@@ -25,12 +25,15 @@ const MealHistory = () => {
             setIsLoading(true);
             setError(null);
 
+            // Get the consistent user ID from Auth context
+            const consistentUserId = userId;
+
             // Get lunch history
-            const { data: lunchData, error: lunchError } = await mealService.getMealHistory(userId, 'lunch', 50);
+            const { data: lunchData, error: lunchError } = await mealService.getMealHistory(consistentUserId, 'lunch', 50);
             if (lunchError) throw lunchError;
 
             // Get dinner history
-            const { data: dinnerData, error: dinnerError } = await mealService.getMealHistory(userId, 'dinner', 50);
+            const { data: dinnerData, error: dinnerError } = await mealService.getMealHistory(consistentUserId, 'dinner', 50);
             if (dinnerError) throw dinnerError;
 
             // Combine and format data

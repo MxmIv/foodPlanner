@@ -5,8 +5,16 @@ export const googleCalendarService = {
     // Check if Google API is ready
     isApiReady: async () => {
         try {
+            console.log('Checking Google API readiness:', {
+                gapiExists: !!window.gapi,
+                gapiClientExists: !!(window.gapi && window.gapi.client),
+                googleExists: !!window.google
+            });
+
             // Check if both gapi and google objects are available
-            return !!(window.gapi && window.gapi.client && window.google);
+            const isReady = !!(window.gapi && window.gapi.client && window.google);
+            console.log('Google API ready status:', isReady);
+            return isReady;
         } catch (error) {
             console.error('Error checking if Google API is ready:', error);
             return false;
@@ -16,11 +24,15 @@ export const googleCalendarService = {
     // Initialize API
     initializeApi: async () => {
         try {
+            console.log('Starting Google Calendar API initialization');
+
             // First initialize Google Identity Services
             await googleAuthService.initializeClient();
+            console.log('Google Identity Services initialized');
 
             // Then initialize GAPI client
             await googleAuthService.initializeGapiClient();
+            console.log('GAPI client initialized');
 
             return { success: true, error: null };
         } catch (error) {
@@ -32,33 +44,28 @@ export const googleCalendarService = {
     // Get events for a specific date range
     getEventsForRange: async (startDateTime, endDateTime) => {
         try {
-            // Check for authentication
-            const token = googleAuthService.getToken();
+            console.log('Getting events for range:', { startDateTime, endDateTime });
+
+            // Direct token retrieval
+            const token = localStorage.getItem('googleToken');
             if (!token) {
-                console.log('No Google token found for calendar events');
+                console.warn('No Google token found in localStorage');
                 return {
                     items: [],
                     error: 'No authentication token available. Please log in.'
                 };
             }
 
-            // Validate the token
-            const isValid = await googleAuthService.validateToken(token);
-            if (!isValid) {
-                console.log('Invalid Google token found for calendar events');
-                // Token is invalid, attempt to reload the page to trigger re-authentication
-                localStorage.removeItem('googleToken');
-                return {
-                    items: [],
-                    error: 'Authentication token expired. Please log in again.'
-                };
-            }
+            console.log('Found token in localStorage, length:', token.length);
 
-            console.log('Fetching events from', startDateTime, 'to', endDateTime);
-
-            // Try using GAPI client first for better error handling
+            // First attempt - Use GAPI client if available
             if (window.gapi && window.gapi.client && window.gapi.client.calendar) {
                 try {
+                    console.log('Attempting to use GAPI client for events');
+
+                    // Make sure token is set in GAPI
+                    window.gapi.client.setToken({ access_token: token });
+
                     const response = await window.gapi.client.calendar.events.list({
                         'calendarId': 'primary',
                         'timeMin': startDateTime,
@@ -67,18 +74,21 @@ export const googleCalendarService = {
                         'orderBy': 'startTime'
                     });
 
-                    console.log('Events retrieved via GAPI:', response.result.items?.length || 0);
+                    console.log('GAPI client success, events retrieved:',
+                        response.result.items?.length || 0);
+
                     return {
                         items: response.result.items || [],
                         error: null
                     };
                 } catch (gapiError) {
-                    console.error('GAPI calendar error:', gapiError);
+                    console.error('GAPI client error:', gapiError);
                     // Fall back to fetch API
                 }
             }
 
-            // Fallback to fetch API
+            // Second attempt - Use fetch API
+            console.log('Using fetch API for calendar events');
             const response = await fetch(
                 `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
                 new URLSearchParams({
@@ -95,27 +105,27 @@ export const googleCalendarService = {
                 }
             );
 
-            // Handle HTTP errors
-            if (response.status === 401) {
-                // Token expired or invalid
-                localStorage.removeItem('googleToken');
-                return {
-                    items: [],
-                    error: 'Authentication token expired. Please log in again.'
-                };
-            }
-
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
+                console.error('Fetch API error:', response.status, response.statusText);
+                if (response.status === 401) {
+                    // Token expired - clear it
+                    localStorage.removeItem('googleToken');
+                    return {
+                        items: [],
+                        error: 'Authentication token expired. Please log in again.'
+                    };
+                }
+
+                const errorText = await response.text();
                 return {
                     items: [],
-                    error: `Calendar API error: ${errorData.error?.message || response.statusText}`
+                    error: `Calendar API error (${response.status}): ${errorText}`
                 };
             }
 
-            // Parse and return the data
             const data = await response.json();
-            console.log('Events retrieved via fetch API:', data.items?.length || 0);
+            console.log('Fetch API success, events retrieved:',
+                data.items?.length || 0);
 
             return {
                 items: data.items || [],
@@ -130,10 +140,48 @@ export const googleCalendarService = {
         }
     },
 
+    // Explicitly initialize the Calendar API
+    initializeCalendarAPI: async () => {
+        try {
+            console.log('Explicitly initializing Calendar API');
+
+            if (!window.gapi || !window.gapi.client) {
+                console.error('GAPI client not available');
+                return { success: false, error: 'GAPI client not available' };
+            }
+
+            // Load the Calendar API specifically
+            await new Promise((resolve, reject) => {
+                window.gapi.client.load('calendar', 'v3', () => {
+                    console.log('Calendar API loaded successfully');
+                    resolve();
+                });
+            });
+
+            console.log('Calendar API initialization complete, checking status:',
+                !!window.gapi.client.calendar);
+
+            // Set token in GAPI client if available
+            const token = localStorage.getItem('googleToken');
+            if (token && window.gapi.client) {
+                window.gapi.client.setToken({ access_token: token });
+                console.log('Set existing token in GAPI client');
+            }
+
+            return {
+                success: !!window.gapi.client.calendar,
+                error: null
+            };
+        } catch (error) {
+            console.error('Error initializing Calendar API:', error);
+            return { success: false, error };
+        }
+    },
+
     // Check if calendar is available and accessible
     checkCalendarAccess: async () => {
         try {
-            const token = googleAuthService.getToken();
+            const token = localStorage.getItem('googleToken');
             if (!token) return false;
 
             const response = await fetch(
