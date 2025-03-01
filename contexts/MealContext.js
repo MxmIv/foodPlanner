@@ -4,17 +4,6 @@ import { useAuth } from './AuthContext';
 import { mealService } from '../services/mealService';
 import { googleCalendarService } from '../services/googleCalendarService';
 
-// Direct token getter for Google API
-const getDirectToken = () => {
-    try {
-        const token = localStorage.getItem('googleToken');
-        console.log('Direct token check:', token ? `Found (length: ${token.length})` : 'Not found');
-        return token;
-    } catch (e) {
-        console.error('Error accessing localStorage:', e);
-        return null;
-    }
-};
 
 // Create the context
 const MealContext = createContext(null);
@@ -94,7 +83,6 @@ export const MealProvider = ({ children }) => {
         };
     }, [isAuthenticated]);
 
-    // Update week dates when offset changes and reset meals
     useEffect(() => {
         // First update weekDates
         const newWeekDates = getWeekDates(currentWeekOffset);
@@ -113,14 +101,12 @@ export const MealProvider = ({ children }) => {
         setEvents(Array(7).fill(null));
     }, [currentWeekOffset]);
 
-    // Load meals for the current week
     useEffect(() => {
         if (userId && isAuthenticated && weekDates.length > 0) {
             loadMealsForWeek();
         }
     }, [weekDates, userId, isAuthenticated]);
 
-    // Load calendar events for the current week
     useEffect(() => {
         if (userId && isAuthenticated && weekDates.length > 0 && isGoogleApiReady) {
             loadEventsForWeek().catch(err => {
@@ -145,7 +131,7 @@ export const MealProvider = ({ children }) => {
         if (hasMealData) {
             const timeoutId = setTimeout(() => {
                 saveMeals();
-            }, 1000);
+            }, 10000);
             return () => clearTimeout(timeoutId);
         }
     }, [meals, userId, isAuthenticated, isLoading]);
@@ -213,31 +199,25 @@ export const MealProvider = ({ children }) => {
         }
     };
 
-    // Load calendar events for the current week
+    // Replace the loadEventsForWeek function in MealPlanner.js with this updated version
+
     const loadEventsForWeek = async () => {
+        // Check both userId and isAuthenticated before proceeding
         if (!userId || !isAuthenticated) {
-            console.log('Not loading events - not authenticated');
-            return;
+            console.log('No user ID available or user not authenticated - skipping calendar fetch');
+            return; // Simply return without fetching or throwing errors
         }
 
+        setIsLoading(true);
+        setError(null);
+
         try {
-            setIsLoading(true);
-            setError(null);
-
-            // Use direct token access
-            const token = getDirectToken();
+            const token = localStorage.getItem('googleToken');
             if (!token) {
-                console.log('No Google token available, skipping calendar load');
-                // Don't set error for missing token to prevent UI disruption
-                setEvents(Array(7).fill(null));
+                console.log('No Google token available');
+                setError('Please log in to see your calendar events');
                 setIsLoading(false);
-                return;
-            }
-
-            // Make sure token is set in GAPI client
-            if (window.gapi && window.gapi.client) {
-                window.gapi.client.setToken({ access_token: token });
-                console.log('Ensured token is set in GAPI client');
+                return; // Return early without throwing
             }
 
             const weekStart = new Date(weekDates[0]);
@@ -246,30 +226,51 @@ export const MealProvider = ({ children }) => {
             const weekEnd = new Date(weekDates[6]);
             weekEnd.setHours(23, 59, 59, 999);
 
-            console.log('Fetching events from', weekStart.toISOString(), 'to', weekEnd.toISOString());
-
-            const result = await googleCalendarService.getEventsForRange(
-                weekStart.toISOString(),
-                weekEnd.toISOString()
-            );
-
-            console.log('Calendar event result:', {
-                hasError: !!result.error,
-                itemCount: result.items?.length || 0
+            console.log('Fetching events for:', {
+                weekStart: weekStart.toISOString(),
+                weekEnd: weekEnd.toISOString(),
+                token: token.substring(0, 10) + '...' // Log partial token for debugging
             });
 
-            if (result.error) {
-                console.warn('Calendar API error:', result.error);
-                // Don't throw auth errors to prevent UI disruption
-                if (!result.error.includes('No authentication token available')) {
-                    throw new Error(result.error);
+            // Use fetch API with error handling
+            const response = await fetch(
+                `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+                new URLSearchParams({
+                    timeMin: weekStart.toISOString(),
+                    timeMax: weekEnd.toISOString(),
+                    singleEvents: 'true',
+                    orderBy: 'startTime'
+                }),
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
                 }
+            );
+
+            // Handle specific HTTP error codes
+            if (response.status === 401) {
+                // Token expired or invalid - handle gracefully without throwing
+                console.log('Authentication token expired or invalid');
+                localStorage.removeItem('googleToken'); // Clear invalid token
+                setError('Authentication token expired. Please log in again.');
+                setEvents(Array(7).fill(null)); // Clear events
+                setIsLoading(false);
+                return; // Return early without throwing
+            } else if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                setError(`Calendar API error: ${errorData.error?.message || response.statusText}`);
                 setEvents(Array(7).fill(null));
-                return;
+                setIsLoading(false);
+                return; // Return early without throwing
             }
 
+            const data = await response.json();
+            console.log('Events retrieved:', data.items.length);
+
             const weekEvents = weekDates.map(date => {
-                const dayEvents = result.items.filter(event => {
+                const dayEvents = data.items.filter(event => {
                     const eventStart = new Date(event.start.dateTime || event.start.date);
                     return (
                         eventStart.getDate() === date.getDate() &&
@@ -287,14 +288,10 @@ export const MealProvider = ({ children }) => {
             });
 
             setEvents(weekEvents);
-        } catch (err) {
-            console.error('Error loading calendar events:', err);
-            // Only set error state for non-auth errors to prevent UI disruption
-            if (!err.message?.includes('No authentication token available')) {
-                setError(`Failed to load calendar events: ${err.message}`);
-            }
+        } catch (error) {
+            console.error('Error loading calendar events:', error);
+            setError(`Failed to load calendar events: ${error.message}`);
             setEvents(Array(7).fill(null));
-            throw err; // Rethrow for the effect error handler
         } finally {
             setIsLoading(false);
         }
